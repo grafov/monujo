@@ -1,4 +1,4 @@
-// Package keystore stores Tron secp256k256 private keys encrypted at rest (scrypt + AES-GCM).
+// Package keystore stores Tron secp256k1 private keys encrypted at rest (scrypt + AES-GCM).
 package keystore
 
 import (
@@ -32,29 +32,47 @@ const (
 
 // EncryptedWalletFile is the on-disk JSON format for monujo keystore v1.
 type EncryptedWalletFile struct {
-	Version   int    `json:"version"`
-	Address   string `json:"address"`
-	KDF       string `json:"kdf"`
-	SaltHex   string `json:"salt_hex"`
-	N         int    `json:"n"`
-	R         int    `json:"r"`
-	P         int    `json:"p"`
-	Cipher    string `json:"cipher"`
-	NonceHex  string `json:"nonce_hex"`
-	DataHex   string `json:"data_hex"`
+	Version  int    `json:"version"`
+	Address  string `json:"address"`
+	KDF      string `json:"kdf"`
+	SaltHex  string `json:"salt_hex"`
+	N        int    `json:"n"`
+	R        int    `json:"r"`
+	P        int    `json:"p"`
+	Cipher   string `json:"cipher"`
+	NonceHex string `json:"nonce_hex"`
+	DataHex  string `json:"data_hex"`
 }
 
-// Store imports a hex-encoded secp256k256 private key, derives Tron address, and writes an encrypted file.
+// Store imports a hex-encoded secp256k1 private key, derives Tron address, and writes an encrypted file.
 func Store(keystoreDir, name string, privHex string, passphrase []byte) (tronAddress string, err error) {
-	if err := os.MkdirAll(keystoreDir, 0o700); err != nil {
-		return "", err
-	}
 	priv, err := parsePrivateKeyHex(privHex)
 	if err != nil {
 		return "", err
 	}
 	defer zeroPriv(priv)
+	return writeEncryptedWallet(keystoreDir, name, priv, passphrase)
+}
 
+// GenerateAndStore creates a new random secp256k1 key, encrypts it to the keystore, and returns
+// the Tron address and a hex copy of the private key for optional one-time export. The caller must
+// treat privHex as secret and avoid logging it.
+func GenerateAndStore(keystoreDir, name string, passphrase []byte) (addr string, privHex string, err error) {
+	priv, err := crypto.GenerateKey()
+	if err != nil {
+		return "", "", err
+	}
+	defer zeroPriv(priv)
+	raw := crypto.FromECDSA(priv)
+	privHex = hex.EncodeToString(raw)
+	addr, err = writeEncryptedWallet(keystoreDir, name, priv, passphrase)
+	return addr, privHex, err
+}
+
+func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, passphrase []byte) (tronAddress string, err error) {
+	if err := os.MkdirAll(keystoreDir, 0o700); err != nil {
+		return "", err
+	}
 	addr := address.PubkeyToAddress(priv.PublicKey).String()
 
 	salt := make([]byte, saltLen)
@@ -81,6 +99,7 @@ func Store(keystoreDir, name string, privHex string, passphrase []byte) (tronAdd
 	}
 	plain := crypto.FromECDSA(priv)
 	out := gcm.Seal(nil, nonce, plain, nil)
+	zeroBytes(plain)
 
 	ew := EncryptedWalletFile{
 		Version:  fileVersion,

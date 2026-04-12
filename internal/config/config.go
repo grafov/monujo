@@ -30,12 +30,12 @@ const (
 
 // Config aggregates CLI flags and resolved endpoints.
 type Config struct {
-	Network       Network
-	HTTPBaseURL   string
-	GRPCAddress   string
+	Network        Network
+	HTTPBaseURL    string
+	GRPCAddress    string
 	TronGridAPIKey string
-	Output        OutputFormat
-	KeystoreDir   string
+	Output         OutputFormat
+	KeystoreDir    string
 	// DefaultFeeLimitSun is the maximum fee (sun) for TRC-20 contract calls.
 	DefaultFeeLimitSun int64
 }

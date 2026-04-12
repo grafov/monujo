@@ -33,26 +33,42 @@ No private keys; uses public TronGrid HTTP APIs.
 
 ## Hot wallet (online PC)
 
-1. **Import** a 64-hex-character secp256k1 private key into an encrypted file (scrypt + AES-GCM):
+1. **Create** a new wallet locally (random secp256k1 key, encrypted keystore). The Tron address is derived from the key; it is valid on both mainnet and Shasta — pick `--network` when you query or send.
+
+```bash
+./build/monujo hot create --name myhot [--network shasta]
+# optional: --export-private-key (prints raw hex once; unsafe)
+# JSON with optional key field: --output json --export-private-key
+```
+
+2. **Import** a 64-hex-character secp256k1 private key into an encrypted file (scrypt + AES-GCM):
 
 ```bash
 ./build/monujo hot import --name myhot --key-hex <64_HEX_CHARS>
 # passphrase prompts; or set MONUJO_IMPORT_KEY instead of --key-hex
 ```
 
-2. **Balance** (decrypts locally, then same public queries as watch):
+3. **Activate** a new address on-chain: Tron accounts become visible after the first incoming TRX. Send a small amount from an already-funded hot wallet:
+
+```bash
+./build/monujo hot activate --from funding --to <NEW_ADDR> --amount 1 --network shasta
+```
+
+(On testnet, you can use a [Shasta faucet](https://www.trongrid.io/faucet) instead of `activate` if you prefer.)
+
+4. **Balance** (decrypts locally, then same public queries as watch):
 
 ```bash
 ./build/monujo hot balance --name myhot
 ```
 
-3. **Send TRX** (native, amount in sun/TRX decimals):
+5. **Send TRX** (native, amount in sun/TRX decimals):
 
 ```bash
 ./build/monujo hot send-trx --name myhot --to <ADDR> --amount 12.5
 ```
 
-4. **Send USDT** (TRC-20; mainnet contract is fixed in code):
+6. **Send USDT** (TRC-20; mainnet contract is fixed in code):
 
 ```bash
 ./build/monujo hot send-usdt --name myhot --to <ADDR> --amount 10.25
@@ -63,7 +79,7 @@ Hot sends use **gRPC** to a Tron full node (default `grpc.trongrid.io:50051` on 
 ## Security notes
 
 - This is **not** a hardware wallet. Threat model: trusted build, trusted machine, encrypted keystore file permissions (`0600`), strong passphrase, and optional TronGrid API key for reliability.
-- **Do not** commit keystores, passphrases, or hex keys. `hot import` supports env `MONUJO_IMPORT_KEY` for scripting — prefer interactive `--key-hex` or env only in controlled environments.
+- **Do not** commit keystores, passphrases, or hex keys. `hot import` supports env `MONUJO_IMPORT_KEY` for scripting — prefer interactive `--key-hex` or env only in controlled environments. Avoid `hot create --export-private-key` unless you accept the risk of exposing the key in the terminal or JSON output.
 - Amount parsing avoids `float64` for token math; USDT/TRX amounts are handled as integers / decimals via strings.
 - USDT contract addresses: **mainnet** `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`; **Shasta** uses the test token address baked into `internal/tron/constants.go` (not official mainnet Tether).
 

@@ -20,11 +20,11 @@ func SetBuildInfo(version, commit string) {
 }
 
 var (
-	networkFlag    string
-	outputFlag     string
-	httpURLFlag    string
-	grpcURLFlag    string
-	apiKeyFlag     string
+	networkFlag     string
+	outputFlag      string
+	httpURLFlag     string
+	grpcURLFlag     string
+	apiKeyFlag      string
 	keystoreDirFlag string
 )
 

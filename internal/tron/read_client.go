@@ -33,10 +33,10 @@ func NewReadClient(cfg *config.Config) *ReadClient {
 
 type accountResponse struct {
 	Data []struct {
-		Balance int64 `json:"balance"`
+		Balance int64               `json:"balance"`
 		TRC20   []map[string]string `json:"trc20"`
 	} `json:"data"`
-	Success bool `json:"success"`
+	Success bool   `json:"success"`
 	Error   string `json:"error"`
 }
 
@@ -97,13 +97,13 @@ func (r *ReadClient) GetBalances(ctx context.Context, addr string) (*AccountBala
 
 type trc20TxResponse struct {
 	Data []struct {
-		TransactionID   string `json:"transaction_id"`
-		BlockTimestamp  int64  `json:"block_timestamp"`
-		From            string `json:"from"`
-		To              string `json:"to"`
-		Value           string `json:"value"`
-		Type            string `json:"type"`
-		TokenInfo       struct {
+		TransactionID  string `json:"transaction_id"`
+		BlockTimestamp int64  `json:"block_timestamp"`
+		From           string `json:"from"`
+		To             string `json:"to"`
+		Value          string `json:"value"`
+		Type           string `json:"type"`
+		TokenInfo      struct {
 			Symbol   string `json:"symbol"`
 			Address  string `json:"address"`
 			Decimals int    `json:"decimals"`

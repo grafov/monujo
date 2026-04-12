@@ -22,25 +22,25 @@ const (
 // UnsignedTransferRequest is a portable description of an intended transfer (for future offline signing).
 // Fields are intentionally minimal and stable across releases.
 type UnsignedTransferRequest struct {
-	Version   int       `json:"version"`
-	Chain     ChainID   `json:"chain"`
-	Kind      string    `json:"kind"` // "trx" | "trc20_usdt"
-	From      string    `json:"from"`
-	To        string    `json:"to"`
-	Amount    string    `json:"amount"` // decimal string in TRX or USDT depending on Kind
-	Contract  string    `json:"contract,omitempty"`
-	CreatedAt int64     `json:"created_at_unix,omitempty"`
-	Note      string    `json:"note,omitempty"`
+	Version   int     `json:"version"`
+	Chain     ChainID `json:"chain"`
+	Kind      string  `json:"kind"` // "trx" | "trc20_usdt"
+	From      string  `json:"from"`
+	To        string  `json:"to"`
+	Amount    string  `json:"amount"` // decimal string in TRX or USDT depending on Kind
+	Contract  string  `json:"contract,omitempty"`
+	CreatedAt int64   `json:"created_at_unix,omitempty"`
+	Note      string  `json:"note,omitempty"`
 }
 
 // SignedTransferResponse wraps a signed broadcast-ready payload (for a future offline signer).
 // RawTransactionHex is chain-specific; for Tron it may be protobuf hex of core.Transaction.
 type SignedTransferResponse struct {
-	Version          int    `json:"version"`
-	Chain            ChainID `json:"chain"`
-	UnsignedID       string `json:"unsigned_id,omitempty"`
-	RawTransactionHex string `json:"raw_transaction_hex,omitempty"`
-	TxID             string `json:"tx_id,omitempty"`
+	Version           int     `json:"version"`
+	Chain             ChainID `json:"chain"`
+	UnsignedID        string  `json:"unsigned_id,omitempty"`
+	RawTransactionHex string  `json:"raw_transaction_hex,omitempty"`
+	TxID              string  `json:"tx_id,omitempty"`
 }
 
 // MarshalUnsigned serializes an unsigned request to JSON with validation.

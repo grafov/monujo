@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/grafov/monujo/internal/app"
+	"github.com/grafov/monujo/internal/config"
 	"github.com/grafov/monujo/internal/keystore"
 	"github.com/spf13/cobra"
 )
@@ -16,7 +17,9 @@ func newHotCmd() *cobra.Command {
 		Short: "Hot wallet operations (encrypted keystore, online signing)",
 	}
 	h.AddCommand(newHotImportCmd())
+	h.AddCommand(newHotCreateCmd())
 	h.AddCommand(newHotBalanceCmd())
+	h.AddCommand(newHotActivateCmd())
 	h.AddCommand(newHotSendTRXCmd())
 	h.AddCommand(newHotSendUSDTCmd())
 	return h
@@ -86,6 +89,61 @@ type errNeedKeyType struct{}
 
 func (errNeedKeyType) Error() string {
 	return "provide --key-hex or set MONUJO_IMPORT_KEY with the hex private key"
+}
+
+func newHotCreateCmd() *cobra.Command {
+	var name string
+	var exportPriv bool
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new wallet locally (random key, encrypted keystore)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pass, err := readPassTwice("New keystore passphrase: ")
+			if err != nil {
+				return err
+			}
+			defer keystore.ZeroPassphrase(pass)
+			svc := app.NewHotService(cfg)
+			includeJSON := exportPriv && cfg.Output == config.OutputJSON
+			return svc.CreateWallet(name, pass, exportPriv, includeJSON)
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "Wallet name (file name in keystore)")
+	cmd.Flags().BoolVar(&exportPriv, "export-private-key", false, "Print raw hex private key once (unsafe)")
+	_ = cmd.MarkFlagRequired("name")
+	return cmd
+}
+
+func newHotActivateCmd() *cobra.Command {
+	var fromName, to, amount string
+	cmd := &cobra.Command{
+		Use:   "activate",
+		Short: "Send TRX to a new address to activate it on-chain (first incoming transfer)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pass, err := keystore.ReadPassphrase("Passphrase (funding wallet): ")
+			if err != nil {
+				return err
+			}
+			defer keystore.ZeroPassphrase(pass)
+			svc := app.NewHotService(cfg)
+			return svc.ActivateAccount(context.Background(), fromName, to, amount, pass)
+		},
+	}
+	cmd.Flags().StringVar(&fromName, "from", "", "Funding wallet name (must have TRX on the selected network)")
+	cmd.Flags().StringVar(&to, "to", "", "Recipient Tron address to activate")
+	cmd.Flags().StringVar(&amount, "amount", "", "TRX amount to send (decimal, e.g. 1)")
+	_ = cmd.MarkFlagRequired("from")
+	_ = cmd.MarkFlagRequired("to")
+	_ = cmd.MarkFlagRequired("amount")
+	return cmd
 }
 
 func newHotBalanceCmd() *cobra.Command {

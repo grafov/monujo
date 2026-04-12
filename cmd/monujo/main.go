@@ -10,7 +10,7 @@ import (
 
 // Injected at link time by Makefile (-ldflags).
 var (
-	version  = "dev"
+	version   = "dev"
 	gitCommit = "unknown"
 )
 

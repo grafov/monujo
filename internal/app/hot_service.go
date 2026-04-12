@@ -61,6 +61,37 @@ func (h *HotService) ImportWallet(name, privHex string, pass []byte) error {
 	return nil
 }
 
+// CreateWallet generates a new private key locally, encrypts it into the keystore, and prints the address.
+// If exportPriv is true, prints the raw hex private key once (high risk); includePrivInJSON adds the key to JSON output.
+func (h *HotService) CreateWallet(name string, pass []byte, exportPriv, includePrivInJSON bool) error {
+	addr, privHex, err := keystore.GenerateAndStore(h.ks, name, pass)
+	if err != nil {
+		return err
+	}
+	if h.cfg.Output == config.OutputJSON {
+		m := map[string]string{
+			"name":    name,
+			"address": addr,
+			"path":    h.ks,
+		}
+		if includePrivInJSON {
+			m["private_key_hex"] = privHex
+		}
+		return json.NewEncoder(os.Stdout).Encode(m)
+	}
+	fmt.Printf("Created wallet %q -> %s\nKeystore: %s\n", name, addr, h.ks)
+	if exportPriv {
+		fmt.Fprintf(os.Stderr, "WARNING: printing private key is unsafe; anyone with this hex can spend funds.\n")
+		fmt.Printf("Private key (hex): %s\n", privHex)
+	}
+	return nil
+}
+
+// ActivateAccount sends the first TRX to a new address so the account exists on-chain (same as send-trx).
+func (h *HotService) ActivateAccount(ctx context.Context, fromName, to string, amountTRX string, pass []byte) error {
+	return h.SendTRX(ctx, fromName, to, amountTRX, pass)
+}
+
 // PrintBalance shows TRX/USDT for a named hot wallet (address from key).
 func (h *HotService) PrintBalance(ctx context.Context, name string, pass []byte) error {
 	pk, err := keystore.LoadPrivateKey(h.ks, name, pass)

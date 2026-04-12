@@ -73,14 +73,14 @@ func (w *WatchService) PrintBalance(ctx context.Context, addr string) error {
 
 // TxsOutput is one row for JSON listing.
 type TxsOutput struct {
-	TxID           string `json:"tx_id"`
-	Time           string `json:"time"`
-	From           string `json:"from"`
-	To             string `json:"to"`
-	ValueMinimal   string `json:"value_minimal"`
-	Token          string `json:"token"`
-	Contract       string `json:"contract"`
-	Type           string `json:"type"`
+	TxID         string `json:"tx_id"`
+	Time         string `json:"time"`
+	From         string `json:"from"`
+	To           string `json:"to"`
+	ValueMinimal string `json:"value_minimal"`
+	Token        string `json:"token"`
+	Contract     string `json:"contract"`
+	Type         string `json:"type"`
 }
 
 // PrintTransfers lists USDT transfers for addr.
