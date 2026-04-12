@@ -7,7 +7,7 @@
 # Go Makefile
 
 # Variables
-PRJ=project_name
+PRJ=monujo
 BINDIR=build
 
 PREFIX?=/usr/local/bin

@@ -1,0 +1,127 @@
+// Package config holds runtime configuration for the monujo CLI (network, endpoints, output).
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// Network identifies Tron mainnet or Shasta testnet.
+type Network string
+
+const (
+	// NetworkMainnet is TRON mainnet.
+	NetworkMainnet Network = "mainnet"
+	// NetworkShasta is the Shasta public testnet.
+	NetworkShasta Network = "shasta"
+)
+
+// OutputFormat controls how results are printed.
+type OutputFormat string
+
+const (
+	// OutputTable prints human-readable tables (default).
+	OutputTable OutputFormat = "table"
+	// OutputJSON prints machine-readable JSON.
+	OutputJSON OutputFormat = "json"
+)
+
+// Config aggregates CLI flags and resolved endpoints.
+type Config struct {
+	Network       Network
+	HTTPBaseURL   string
+	GRPCAddress   string
+	TronGridAPIKey string
+	Output        OutputFormat
+	KeystoreDir   string
+	// DefaultFeeLimitSun is the maximum fee (sun) for TRC-20 contract calls.
+	DefaultFeeLimitSun int64
+}
+
+const (
+	defaultTronGridHTTPMainnet = "https://api.trongrid.io"
+	defaultTronGridHTTPShasta  = "https://api.shasta.trongrid.io"
+	defaultGRPCMainnet         = "grpc.trongrid.io:50051"
+	defaultGRPCShasta          = "grpc.shasta.trongrid.io:50051"
+	defaultFeeLimitSun         = int64(100_000_000)
+)
+
+// DefaultKeystoreDir returns ~/.config/monujo/keystore unless MONUJO_KEYSTORE_DIR is set.
+func DefaultKeystoreDir() (string, error) {
+	if v := strings.TrimSpace(os.Getenv("MONUJO_KEYSTORE_DIR")); v != "" {
+		return filepath.Abs(v)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "monujo", "keystore"), nil
+}
+
+// TronGridAPIKeyFromEnv returns optional TronGrid API key from MONUJO_TRONGRID_API_KEY.
+func TronGridAPIKeyFromEnv() string {
+	return strings.TrimSpace(os.Getenv("MONUJO_TRONGRID_API_KEY"))
+}
+
+// ParseNetwork normalizes the network flag value.
+func ParseNetwork(s string) (Network, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "mainnet", "":
+		return NetworkMainnet, nil
+	case "shasta":
+		return NetworkShasta, nil
+	default:
+		return "", fmt.Errorf("unknown network %q (use mainnet or shasta)", s)
+	}
+}
+
+// ParseOutputFormat parses --output.
+func ParseOutputFormat(s string) (OutputFormat, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "table", "":
+		return OutputTable, nil
+	case "json":
+		return OutputJSON, nil
+	default:
+		return "", fmt.Errorf("unknown output format %q (use table or json)", s)
+	}
+}
+
+// Build constructs a Config from parts.
+func Build(network Network, output OutputFormat, httpOverride, grpcOverride, apiKey string, keystoreDir string) (*Config, error) {
+	var httpURL, grpcAddr string
+	switch network {
+	case NetworkMainnet:
+		httpURL = defaultTronGridHTTPMainnet
+		grpcAddr = defaultGRPCMainnet
+	case NetworkShasta:
+		httpURL = defaultTronGridHTTPShasta
+		grpcAddr = defaultGRPCShasta
+	default:
+		return nil, fmt.Errorf("unsupported network %q", network)
+	}
+	if strings.TrimSpace(httpOverride) != "" {
+		httpURL = strings.TrimSpace(httpOverride)
+	}
+	if strings.TrimSpace(grpcOverride) != "" {
+		grpcAddr = strings.TrimSpace(grpcOverride)
+	}
+	if keystoreDir == "" {
+		var err error
+		keystoreDir, err = DefaultKeystoreDir()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &Config{
+		Network:            network,
+		HTTPBaseURL:        strings.TrimRight(httpURL, "/"),
+		GRPCAddress:        grpcAddr,
+		TronGridAPIKey:     strings.TrimSpace(apiKey),
+		Output:             output,
+		KeystoreDir:        keystoreDir,
+		DefaultFeeLimitSun: defaultFeeLimitSun,
+	}, nil
+}
