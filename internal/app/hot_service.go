@@ -87,6 +87,33 @@ func (h *HotService) CreateWallet(name string, pass []byte, exportPriv, includeP
 	return nil
 }
 
+// ListWallets prints metadata for each encrypted wallet file in the keystore (no decryption).
+func (h *HotService) ListWallets() error {
+	items, err := keystore.ListWallets(h.ks)
+	if err != nil {
+		return err
+	}
+	if h.cfg.Output == config.OutputJSON {
+		out := struct {
+			KeystoreDir string                    `json:"keystore_dir"`
+			Wallets     []keystore.WalletListItem `json:"wallets"`
+		}{KeystoreDir: h.ks, Wallets: items}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(out)
+	}
+	fmt.Printf("Keystore: %s\n", h.ks)
+	if len(items) == 0 {
+		fmt.Println("No wallets.")
+		return nil
+	}
+	fmt.Printf("%s\t%s\n", "NAME", "ADDRESS")
+	for _, w := range items {
+		fmt.Printf("%s\t%s\n", w.Name, w.Address)
+	}
+	return nil
+}
+
 // ActivateAccount sends the first TRX to a new address so the account exists on-chain (same as send-trx).
 func (h *HotService) ActivateAccount(ctx context.Context, fromName, to string, amountTRX string, pass []byte) error {
 	return h.SendTRX(ctx, fromName, to, amountTRX, pass)

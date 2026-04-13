@@ -18,6 +18,7 @@ func newHotCmd() *cobra.Command {
 	}
 	h.AddCommand(newHotImportCmd())
 	h.AddCommand(newHotCreateCmd())
+	h.AddCommand(newHotListCmd())
 	h.AddCommand(newHotBalanceCmd())
 	h.AddCommand(newHotActivateCmd())
 	h.AddCommand(newHotSendTRXCmd())
@@ -116,6 +117,21 @@ func newHotCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&exportPriv, "export-private-key", false, "Print raw hex private key once (unsafe)")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
+}
+
+func newHotListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List locally stored hot wallets (names and Tron addresses from keystore files)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			svc := app.NewHotService(cfg)
+			return svc.ListWallets()
+		},
+	}
 }
 
 func newHotActivateCmd() *cobra.Command {

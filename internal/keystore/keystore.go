@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -42,6 +43,58 @@ type EncryptedWalletFile struct {
 	Cipher   string `json:"cipher"`
 	NonceHex string `json:"nonce_hex"`
 	DataHex  string `json:"data_hex"`
+}
+
+// WalletListItem is public metadata for one keystore file (no secret material).
+type WalletListItem struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
+// ListWallets returns one entry per valid v1 wallet JSON in keystoreDir, sorted by name.
+// A missing directory yields an empty list. Unreadable or non-v1 JSON files are skipped.
+func ListWallets(keystoreDir string) ([]WalletListItem, error) {
+	entries, err := os.ReadDir(keystoreDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []WalletListItem
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(strings.ToLower(name), ".json") {
+			continue
+		}
+		path := filepath.Join(keystoreDir, name)
+		path = filepath.Clean(path)
+		base := filepath.Clean(keystoreDir)
+		rel, err := filepath.Rel(base, path)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var ew EncryptedWalletFile
+		if err := json.Unmarshal(body, &ew); err != nil {
+			continue
+		}
+		if ew.Version != fileVersion || strings.TrimSpace(ew.Address) == "" {
+			continue
+		}
+		stem := name[:len(name)-len(".json")]
+		out = append(out, WalletListItem{Name: stem, Address: ew.Address})
+	}
+	slices.SortFunc(out, func(a, b WalletListItem) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return out, nil
 }
 
 // Store imports a hex-encoded secp256k1 private key, derives Tron address, and writes an encrypted file.
