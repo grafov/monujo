@@ -57,6 +57,10 @@ lint:
 lint-fix:
 	go tool golangci-lint run -v --fix ./...
 
+.PHONY: sec
+sec:
+	go tool gosec ./...
+
 .PHONY: tidy
 tidy:
 	go mod tidy

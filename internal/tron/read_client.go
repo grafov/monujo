@@ -58,7 +58,7 @@ func (r *ReadClient) GetBalances(ctx context.Context, addr string) (*AccountBala
 		return nil, err
 	}
 	r.addAPIKey(req)
-	resp, err := r.client.Do(req) //nolint:gosec // URL built from trusted cfg.HTTPBaseURL and validated address
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (r *ReadClient) ListUSDTTransfers(ctx context.Context, addr string, limit i
 		return nil, err
 	}
 	r.addAPIKey(req)
-	resp, err := r.client.Do(req) //nolint:gosec // URL built from trusted cfg.HTTPBaseURL and validated address
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, err
 	}

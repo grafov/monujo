@@ -155,10 +155,26 @@ func ListWallets(keystoreDir string) ([]WalletListItem, error) {
 	return out, nil
 }
 
+// readWalletFile reads a wallet file by logical name from keystoreDir using os.Root,
+// so that the resulting open is constrained to keystoreDir and cannot escape via
+// symlinks or path traversal even if safeName is ever weakened.
+func readWalletFile(keystoreDir, name string) ([]byte, error) {
+	root, err := os.OpenRoot(keystoreDir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	f, err := root.Open(safeName(name) + ".json")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return io.ReadAll(f)
+}
+
 // ReadWalletNetworks returns normalized network ids from the wallet JSON without decrypting the key.
 func ReadWalletNetworks(keystoreDir, name string) ([]string, error) {
-	path := filepath.Join(keystoreDir, safeName(name)+".json")
-	body, err := os.ReadFile(path) //nolint:gosec // G304 -- path under keystoreDir+safeName
+	body, err := readWalletFile(keystoreDir, name)
 	if err != nil {
 		return nil, err
 	}
@@ -178,8 +194,7 @@ func EnsureNetworkRecorded(keystoreDir, name, network string) error {
 	if net == "" {
 		return fmt.Errorf("empty network")
 	}
-	path := filepath.Join(keystoreDir, safeName(name)+".json")
-	body, err := os.ReadFile(path) //nolint:gosec // G304 -- path under keystoreDir+safeName
+	body, err := readWalletFile(keystoreDir, name)
 	if err != nil {
 		return err
 	}
@@ -200,6 +215,7 @@ func EnsureNetworkRecorded(keystoreDir, name, network string) error {
 	if err != nil {
 		return err
 	}
+	path := filepath.Join(keystoreDir, safeName(name)+".json")
 	return writeFileAtomic(path, out, 0o600)
 }
 
@@ -227,7 +243,7 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // G703 -- tmp from CreateTemp in same dir
+	if err := os.Rename(tmpPath, path); err != nil {
 		return err
 	}
 	ok = true
@@ -319,8 +335,7 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 
 // LoadPrivateKey decrypts the named wallet and returns an ECDSA private key (caller must wipe when done).
 func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, error) {
-	path := filepath.Join(keystoreDir, safeName(name)+".json")
-	body, err := os.ReadFile(path) //nolint:gosec // G304 -- path under keystoreDir+safeName
+	body, err := readWalletFile(keystoreDir, name)
 	if err != nil {
 		return nil, err
 	}
