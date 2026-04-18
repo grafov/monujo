@@ -18,7 +18,7 @@ func TestStoreLoadRoundtrip(t *testing.T) {
 	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
 	pass := []byte("test-passphrase-32-chars-long!!")
 	defer ZeroPassphrase(pass)
-	addr, err := Store(dir, "t1", hexKey, pass)
+	addr, err := Store(dir, "t1", hexKey, pass, []string{"mainnet"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestGenerateAndStoreRoundtrip(t *testing.T) {
 	dir := t.TempDir()
 	pass := []byte("test-passphrase-32-chars-long!!")
 	defer ZeroPassphrase(pass)
-	addr, privHex, err := GenerateAndStore(dir, "gen1", pass)
+	addr, privHex, err := GenerateAndStore(dir, "gen1", pass, []string{"shasta"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,11 +91,11 @@ func TestListWalletsAfterStore(t *testing.T) {
 	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
 	pass := []byte("test-passphrase-32-chars-long!!")
 	defer ZeroPassphrase(pass)
-	addr, err := Store(dir, "alpha", hexKey, pass)
+	addr, err := Store(dir, "alpha", hexKey, pass, []string{"mainnet"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Store(dir, "beta", hexKey, pass)
+	_, err = Store(dir, "beta", hexKey, pass, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,5 +119,95 @@ func TestListWalletsAfterStore(t *testing.T) {
 	}
 	if len(list2) != 2 {
 		t.Fatalf("junk should be ignored, got %d entries", len(list2))
+	}
+}
+
+func TestNetworkOperationNeedsConfirmation(t *testing.T) {
+	if NetworkOperationNeedsConfirmation(nil, "mainnet") {
+		t.Fatal("nil recorded should not need confirm")
+	}
+	if NetworkOperationNeedsConfirmation([]string{}, "mainnet") {
+		t.Fatal("empty recorded should not need confirm")
+	}
+	if !NetworkOperationNeedsConfirmation([]string{"shasta"}, "mainnet") {
+		t.Fatal("different network should need confirm")
+	}
+	if NetworkOperationNeedsConfirmation([]string{"mainnet", "shasta"}, "mainnet") {
+		t.Fatal("matching network should not need confirm")
+	}
+}
+
+func TestReadWalletNetworksEnsureRecorded(t *testing.T) {
+	dir := t.TempDir()
+	priv, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+	pass := []byte("test-passphrase-32-chars-long!!")
+	defer ZeroPassphrase(pass)
+	if _, err := Store(dir, "w1", hexKey, pass, []string{"mainnet"}); err != nil {
+		t.Fatal(err)
+	}
+	nets, err := ReadWalletNetworks(dir, "w1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nets) != 1 || nets[0] != "mainnet" {
+		t.Fatalf("networks: %v", nets)
+	}
+	if err := EnsureNetworkRecorded(dir, "w1", "shasta"); err != nil {
+		t.Fatal(err)
+	}
+	nets, err = ReadWalletNetworks(dir, "w1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nets) != 2 || nets[0] != "mainnet" || nets[1] != "shasta" {
+		t.Fatalf("after ensure: %v", nets)
+	}
+	if err := EnsureNetworkRecorded(dir, "w1", "shasta"); err != nil {
+		t.Fatal(err)
+	}
+	pk, err := LoadPrivateKey(dir, "w1", pass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pk.Wipe()
+}
+
+func TestLegacyFileWithoutNetworksStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	priv, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+	pass := []byte("test-passphrase-32-chars-long!!")
+	defer ZeroPassphrase(pass)
+	if _, err := Store(dir, "legacy", hexKey, pass, nil); err != nil {
+		t.Fatal(err)
+	}
+	nets, err := ReadWalletNetworks(dir, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nets) != 0 {
+		t.Fatalf("expected no networks, got %v", nets)
+	}
+	pk, err := LoadPrivateKey(dir, "legacy", pass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pk.Wipe()
+	if err := EnsureNetworkRecorded(dir, "legacy", "mainnet"); err != nil {
+		t.Fatal(err)
+	}
+	nets, err = ReadWalletNetworks(dir, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nets) != 1 || nets[0] != "mainnet" {
+		t.Fatalf("expected mainnet: %v", nets)
 	}
 }

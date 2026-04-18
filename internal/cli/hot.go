@@ -136,12 +136,16 @@ func newHotListCmd() *cobra.Command {
 
 func newHotActivateCmd() *cobra.Command {
 	var fromName, to, amount string
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "activate",
 		Short: "Send TRX to a new address to activate it on-chain (first incoming transfer)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
+				return err
+			}
+			if err := confirmWalletNetworkForOperation(cfg, fromName, force); err != nil {
 				return err
 			}
 			pass, err := keystore.ReadPassphrase("Passphrase (funding wallet): ")
@@ -159,17 +163,22 @@ func newHotActivateCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("from")
 	_ = cmd.MarkFlagRequired("to")
 	_ = cmd.MarkFlagRequired("amount")
+	cmd.Flags().BoolVar(&force, "force", false, "Skip interactive confirmation when operation network differs from networks recorded in the wallet file")
 	return cmd
 }
 
 func newHotBalanceCmd() *cobra.Command {
 	var name string
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "balance",
 		Short: "Show TRX and USDT balance for a named hot wallet",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
+				return err
+			}
+			if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
 				return err
 			}
 			pass, err := keystore.ReadPassphrase("Passphrase: ")
@@ -182,18 +191,23 @@ func newHotBalanceCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Wallet name")
+	cmd.Flags().BoolVar(&force, "force", false, "Skip interactive confirmation when operation network differs from networks recorded in the wallet file")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 
 func newHotSendTRXCmd() *cobra.Command {
 	var name, to, amount string
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "send-trx",
 		Short: "Send TRX from a named hot wallet",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
+				return err
+			}
+			if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
 				return err
 			}
 			pass, err := keystore.ReadPassphrase("Passphrase: ")
@@ -211,17 +225,22 @@ func newHotSendTRXCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("to")
 	_ = cmd.MarkFlagRequired("amount")
+	cmd.Flags().BoolVar(&force, "force", false, "Skip interactive confirmation when operation network differs from networks recorded in the wallet file")
 	return cmd
 }
 
 func newHotSendUSDTCmd() *cobra.Command {
 	var name, to, amount string
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "send-usdt",
 		Short: "Send USDT (TRC-20) from a named hot wallet",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
+				return err
+			}
+			if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
 				return err
 			}
 			pass, err := keystore.ReadPassphrase("Passphrase: ")
@@ -239,5 +258,6 @@ func newHotSendUSDTCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("to")
 	_ = cmd.MarkFlagRequired("amount")
+	cmd.Flags().BoolVar(&force, "force", false, "Skip interactive confirmation when operation network differs from networks recorded in the wallet file")
 	return cmd
 }

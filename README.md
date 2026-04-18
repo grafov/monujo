@@ -21,6 +21,7 @@ Requires Go 1.24+ (see `go.mod`).
 | `--network` | `mainnet` (default) or `shasta` (testnet; USDT contract differs). |
 | `--output` | `table` or `json`. |
 | `--http-url` / `--grpc-url` | Override TronGrid HTTP base URL and gRPC `host:port`. |
+| `--force` | On `hot balance`, `hot send-trx`, `hot send-usdt`, `hot activate` only: skip the interactive confirmation when `--network` differs from networks already recorded in the wallet file (see below). |
 
 ## Watch-only (cold address, online PC)
 
@@ -33,7 +34,17 @@ No private keys; uses public TronGrid HTTP APIs.
 
 ## Hot wallet (online PC)
 
-1. **Create** a new wallet locally (random secp256k1 key, encrypted keystore). The Tron address is derived from the key; it is valid on both mainnet and Shasta — pick `--network` when you query or send.
+Each wallet file stores optional **`networks`** metadata: which Tron networks (`mainnet`, `shasta`) this wallet has already been used with. **`hot create`** and **`hot import`** record the current `--network`. After a successful **`hot send-trx`** or **`hot send-usdt`**, the current network is appended if missing.
+
+If you run **`hot balance`**, **`hot send-trx`**, **`hot send-usdt`**, or **`hot activate`** with a `--network` that is **not** in that list while the list is **non-empty**, the CLI prints the previously recorded networks and asks for confirmation before the passphrase prompt. In scripts or without a TTY, pass **`--force`** to acknowledge the mismatch, or run interactively and answer `y`/`yes`.
+
+List wallets (names, addresses, and recorded networks):
+
+```bash
+./build/monujo hot list [--output json]
+```
+
+1. **Create** a new wallet locally (random secp256k1 key, encrypted keystore). The Tron address is derived from the key; it is valid on both mainnet and Shasta — pick `--network` when you query or send; it is stored in the wallet file metadata.
 
 ```bash
 ./build/monujo hot create --name myhot [--network shasta]

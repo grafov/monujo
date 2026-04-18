@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/grafov/monujo/internal/config"
 	"github.com/grafov/monujo/internal/domain"
@@ -46,7 +47,7 @@ func (h *HotService) printSend(out SendResult) error {
 
 // ImportWallet encrypts a hex private key into the keystore under name.
 func (h *HotService) ImportWallet(name, privHex string, pass []byte) error {
-	addr, err := keystore.Store(h.ks, name, privHex, pass)
+	addr, err := keystore.Store(h.ks, name, privHex, pass, []string{string(h.cfg.Network)})
 	if err != nil {
 		return err
 	}
@@ -64,7 +65,7 @@ func (h *HotService) ImportWallet(name, privHex string, pass []byte) error {
 // CreateWallet generates a new private key locally, encrypts it into the keystore, and prints the address.
 // If exportPriv is true, prints the raw hex private key once (high risk); includePrivInJSON adds the key to JSON output.
 func (h *HotService) CreateWallet(name string, pass []byte, exportPriv, includePrivInJSON bool) error {
-	addr, privHex, err := keystore.GenerateAndStore(h.ks, name, pass)
+	addr, privHex, err := keystore.GenerateAndStore(h.ks, name, pass, []string{string(h.cfg.Network)})
 	if err != nil {
 		return err
 	}
@@ -107,9 +108,13 @@ func (h *HotService) ListWallets() error {
 		fmt.Println("No wallets.")
 		return nil
 	}
-	fmt.Printf("%s\t%s\n", "NAME", "ADDRESS")
+	fmt.Printf("%s\t%s\t%s\n", "NAME", "ADDRESS", "NETWORKS")
 	for _, w := range items {
-		fmt.Printf("%s\t%s\n", w.Name, w.Address)
+		nets := "-"
+		if len(w.Networks) > 0 {
+			nets = strings.Join(w.Networks, ",")
+		}
+		fmt.Printf("%s\t%s\t%s\n", w.Name, w.Address, nets)
 	}
 	return nil
 }
@@ -153,6 +158,9 @@ func (h *HotService) SendTRX(ctx context.Context, name, to string, amountTRX str
 	if err != nil {
 		return err
 	}
+	if err := keystore.EnsureNetworkRecorded(h.ks, name, string(h.cfg.Network)); err != nil {
+		return fmt.Errorf("broadcast ok (tx %s) but could not update wallet networks metadata: %w", txid, err)
+	}
 	return h.printSend(SendResult{
 		TxID:    txid,
 		From:    pk.Address,
@@ -188,6 +196,9 @@ func (h *HotService) SendUSDT(ctx context.Context, name, to, amount string, pass
 	txid, err := wc.SendUSDT(ctx, pk.Address, to, amt, pk.Key)
 	if err != nil {
 		return err
+	}
+	if err := keystore.EnsureNetworkRecorded(h.ks, name, string(h.cfg.Network)); err != nil {
+		return fmt.Errorf("broadcast ok (tx %s) but could not update wallet networks metadata: %w", txid, err)
 	}
 	return h.printSend(SendResult{
 		TxID:    txid,

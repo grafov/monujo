@@ -33,22 +33,76 @@ const (
 
 // EncryptedWalletFile is the on-disk JSON format for monujo keystore v1.
 type EncryptedWalletFile struct {
-	Version  int    `json:"version"`
-	Address  string `json:"address"`
-	KDF      string `json:"kdf"`
-	SaltHex  string `json:"salt_hex"`
-	N        int    `json:"n"`
-	R        int    `json:"r"`
-	P        int    `json:"p"`
-	Cipher   string `json:"cipher"`
-	NonceHex string `json:"nonce_hex"`
-	DataHex  string `json:"data_hex"`
+	Version  int      `json:"version"`
+	Address  string   `json:"address"`
+	Networks []string `json:"networks,omitempty"`
+	KDF      string   `json:"kdf"`
+	SaltHex  string   `json:"salt_hex"`
+	N        int      `json:"n"`
+	R        int      `json:"r"`
+	P        int      `json:"p"`
+	Cipher   string   `json:"cipher"`
+	NonceHex string   `json:"nonce_hex"`
+	DataHex  string   `json:"data_hex"`
 }
 
 // WalletListItem is public metadata for one keystore file (no secret material).
 type WalletListItem struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
+	Name     string   `json:"name"`
+	Address  string   `json:"address"`
+	Networks []string `json:"networks,omitempty"`
+}
+
+// NormalizeNetworkID returns lowercase Tron network ids used in keystore (mainnet, shasta).
+func NormalizeNetworkID(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return ""
+	}
+	switch s {
+	case "mainnet":
+		return "mainnet"
+	case "shasta":
+		return "shasta"
+	default:
+		return s
+	}
+}
+
+func normalizeNetworkList(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, s := range in {
+		n := NormalizeNetworkID(s)
+		if n == "" {
+			continue
+		}
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// NetworkOperationNeedsConfirmation reports whether the wallet file lists networks
+// and the operation network is not among them.
+func NetworkOperationNeedsConfirmation(recorded []string, operationNetwork string) bool {
+	if len(recorded) == 0 {
+		return false
+	}
+	op := NormalizeNetworkID(operationNetwork)
+	for _, r := range recorded {
+		if NormalizeNetworkID(r) == op {
+			return false
+		}
+	}
+	return true
 }
 
 // ListWallets returns one entry per valid v1 wallet JSON in keystoreDir, sorted by name.
@@ -89,7 +143,11 @@ func ListWallets(keystoreDir string) ([]WalletListItem, error) {
 			continue
 		}
 		stem := name[:len(name)-len(".json")]
-		out = append(out, WalletListItem{Name: stem, Address: ew.Address})
+		out = append(out, WalletListItem{
+			Name:     stem,
+			Address:  ew.Address,
+			Networks: normalizeNetworkList(ew.Networks),
+		})
 	}
 	slices.SortFunc(out, func(a, b WalletListItem) int {
 		return strings.Compare(a.Name, b.Name)
@@ -97,20 +155,100 @@ func ListWallets(keystoreDir string) ([]WalletListItem, error) {
 	return out, nil
 }
 
+// ReadWalletNetworks returns normalized network ids from the wallet JSON without decrypting the key.
+func ReadWalletNetworks(keystoreDir, name string) ([]string, error) {
+	path := filepath.Join(keystoreDir, safeName(name)+".json")
+	body, err := os.ReadFile(path) //nolint:gosec // G304 -- path under keystoreDir+safeName
+	if err != nil {
+		return nil, err
+	}
+	var ew EncryptedWalletFile
+	if err := json.Unmarshal(body, &ew); err != nil {
+		return nil, err
+	}
+	if ew.Version != fileVersion {
+		return nil, fmt.Errorf("unsupported keystore version %d", ew.Version)
+	}
+	return normalizeNetworkList(ew.Networks), nil
+}
+
+// EnsureNetworkRecorded appends network to the wallet file metadata if missing (no re-encryption).
+func EnsureNetworkRecorded(keystoreDir, name, network string) error {
+	net := NormalizeNetworkID(network)
+	if net == "" {
+		return fmt.Errorf("empty network")
+	}
+	path := filepath.Join(keystoreDir, safeName(name)+".json")
+	body, err := os.ReadFile(path) //nolint:gosec // G304 -- path under keystoreDir+safeName
+	if err != nil {
+		return err
+	}
+	var ew EncryptedWalletFile
+	if err := json.Unmarshal(body, &ew); err != nil {
+		return err
+	}
+	if ew.Version != fileVersion {
+		return fmt.Errorf("unsupported keystore version %d", ew.Version)
+	}
+	for _, x := range normalizeNetworkList(ew.Networks) {
+		if x == net {
+			return nil
+		}
+	}
+	ew.Networks = normalizeNetworkList(append(slices.Clone(ew.Networks), net))
+	out, err := json.MarshalIndent(&ew, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(path, out, 0o600)
+}
+
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".monujo-keystore-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := f.Name()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Chmod(perm); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // G703 -- tmp from CreateTemp in same dir
+		return err
+	}
+	ok = true
+	return nil
+}
+
 // Store imports a hex-encoded secp256k1 private key, derives Tron address, and writes an encrypted file.
-func Store(keystoreDir, name string, privHex string, passphrase []byte) (tronAddress string, err error) {
+// networks lists Tron networks (e.g. mainnet, shasta) recorded for this wallet; may be nil.
+func Store(keystoreDir, name string, privHex string, passphrase []byte, networks []string) (tronAddress string, err error) {
 	priv, err := parsePrivateKeyHex(privHex)
 	if err != nil {
 		return "", err
 	}
 	defer zeroPriv(priv)
-	return writeEncryptedWallet(keystoreDir, name, priv, passphrase)
+	return writeEncryptedWallet(keystoreDir, name, priv, passphrase, networks)
 }
 
 // GenerateAndStore creates a new random secp256k1 key, encrypts it to the keystore, and returns
 // the Tron address and a hex copy of the private key for optional one-time export. The caller must
 // treat privHex as secret and avoid logging it.
-func GenerateAndStore(keystoreDir, name string, passphrase []byte) (addr string, privHex string, err error) {
+func GenerateAndStore(keystoreDir, name string, passphrase []byte, networks []string) (addr string, privHex string, err error) {
 	priv, err := crypto.GenerateKey()
 	if err != nil {
 		return "", "", err
@@ -118,11 +256,11 @@ func GenerateAndStore(keystoreDir, name string, passphrase []byte) (addr string,
 	defer zeroPriv(priv)
 	raw := crypto.FromECDSA(priv)
 	privHex = hex.EncodeToString(raw)
-	addr, err = writeEncryptedWallet(keystoreDir, name, priv, passphrase)
+	addr, err = writeEncryptedWallet(keystoreDir, name, priv, passphrase, networks)
 	return addr, privHex, err
 }
 
-func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, passphrase []byte) (tronAddress string, err error) {
+func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, passphrase []byte, networks []string) (tronAddress string, err error) {
 	if err := os.MkdirAll(keystoreDir, 0o700); err != nil {
 		return "", err
 	}
@@ -154,9 +292,11 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 	out := gcm.Seal(nil, nonce, plain, nil)
 	zeroBytes(plain)
 
+	nets := normalizeNetworkList(networks)
 	ew := EncryptedWalletFile{
 		Version:  fileVersion,
 		Address:  addr,
+		Networks: nets,
 		KDF:      "scrypt",
 		SaltHex:  hex.EncodeToString(salt),
 		N:        scryptN,
@@ -180,7 +320,7 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 // LoadPrivateKey decrypts the named wallet and returns an ECDSA private key (caller must wipe when done).
 func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, error) {
 	path := filepath.Join(keystoreDir, safeName(name)+".json")
-	body, err := os.ReadFile(path)
+	body, err := os.ReadFile(path) //nolint:gosec // G304 -- path under keystoreDir+safeName
 	if err != nil {
 		return nil, err
 	}
