@@ -37,6 +37,18 @@ docker-build: # just set token into GITHUB_TOKEN environment variable
 test:
 	go tool ginkgo ./...
 
+.PHONY: test-race
+test-race:
+	go tool ginkgo -r --race --randomize-all --randomize-suites ./internal/tron
+
+.PHONY: test-coverage
+test-coverage:
+	go tool ginkgo -r --cover --coverpkg=./internal/tron ./internal/tron
+
+.PHONY: test-integration
+test-integration:
+	MONUJO_TRON_E2E=1 go tool ginkgo --tags=integration -r ./internal/tron
+
 .PHONY: run
 run: build
 	./$(BINDIR)/$(APP)

@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "address": "TJRyWwFs9wTFGZg3JbrVriFbNfCug5tDeC",
+      "balance": 555,
+      "trc20": [
+        {"TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs": "777000"}
+      ]
+    }
+  ],
+  "success": true
+}

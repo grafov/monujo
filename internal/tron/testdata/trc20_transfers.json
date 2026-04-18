@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "transaction_id": "aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff66667777888899990000",
+      "block_timestamp": 1700000000000,
+      "from": "TFrom1111111111111111111111111111",
+      "to":   "TTo000000000000000000000000000000",
+      "value": "1500000",
+      "type":  "Transfer",
+      "token_info": {
+        "symbol":   "USDT",
+        "address":  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        "decimals": 6
+      }
+    },
+    {
+      "transaction_id": "bbbb2222cccc3333dddd4444eeee5555ffff666677778888999900001111aaaa",
+      "block_timestamp": 1700000060000,
+      "from": "TFromOther00000000000000000000000",
+      "to":   "TToOther0000000000000000000000000",
+      "value": "42",
+      "type":  "Transfer",
+      "token_info": {
+        "symbol":   "",
+        "address":  "",
+        "decimals": 6
+      }
+    }
+  ],
+  "success": true,
+  "meta": {"fingerprint": "fp-next-page"}
+}

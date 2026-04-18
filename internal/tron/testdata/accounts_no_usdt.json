@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "address": "TMuA6YqfCeX8EhbfYEg5y7S4DqzSJireY9",
+      "balance": 7000000,
+      "trc20": [
+        {"TXXXothertoken00000000000000000000": "42"}
+      ]
+    }
+  ],
+  "success": true
+}

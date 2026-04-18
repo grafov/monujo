@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "address": "TMuA6YqfCeX8EhbfYEg5y7S4DqzSJireY9",
+      "balance": 12345678,
+      "trc20": [
+        {"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t": "1234500000"},
+        {"TXXXothertoken00000000000000000000": "999"}
+      ]
+    }
+  ],
+  "success": true,
+  "meta": {"at": 1700000000000, "page_size": 1}
+}
