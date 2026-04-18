@@ -2,6 +2,7 @@ package keystore
 
 import (
 	"fmt"
+	"math"
 	"os"
 
 	"golang.org/x/term"
@@ -17,7 +18,11 @@ func ZeroPassphrase(p []byte) {
 // ReadPassphrase reads a passphrase from the terminal without echo (fallback to stdin if not a TTY).
 func ReadPassphrase(prompt string) ([]byte, error) {
 	fmt.Fprint(os.Stderr, prompt)
-	fd := int(os.Stdin.Fd())
+	rawFd := os.Stdin.Fd()
+	if rawFd > uintptr(math.MaxInt) {
+		return nil, fmt.Errorf("stdin fd out of int range")
+	}
+	fd := int(rawFd)
 	if term.IsTerminal(fd) {
 		line, err := term.ReadPassword(fd)
 		fmt.Fprintln(os.Stderr)
