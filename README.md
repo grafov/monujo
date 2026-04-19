@@ -1,6 +1,6 @@
 # monujo
 
-Minimal **Go CLI** for **Tron / TRC-20 / USDT**: watch-only queries for cold addresses (no keys) and **hot wallet** send flows with a **local encrypted keystore**. Solana/BEP are out of scope for this version; the layout leaves room for a future offline-signing step.
+Minimal **Go CLI** for **Tron / TRC-20 / USDT**: watch-only queries for cold addresses (no keys), **hot wallet** send flows with a **local encrypted keystore**, and an **air-gapped offline signer** (`monujo offline build|sign|broadcast`) for cold-storage workflows. Solana/BEP are out of scope.
 
 ## Build
 
@@ -13,15 +13,15 @@ Requires Go 1.24+ (see `go.mod`).
 
 ## Configuration
 
-| Env / flag | Purpose |
-|------------|---------|
-| `MONUJO_TRONGRID_API_KEY` / `--api-key` | Optional TronGrid API key (recommended for higher rate limits). |
-| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Hot wallet files directory (default: `~/.config/monujo/keystore`). |
-| `MONUJO_IMPORT_KEY` | Hex private key for `hot import` if `--key-hex` is omitted. |
-| `--network` | `mainnet` (default) or `shasta` (testnet; USDT contract differs). |
-| `--output` | `table` or `json`. |
-| `--http-url` / `--grpc-url` | Override TronGrid HTTP base URL and gRPC `host:port`. |
-| `--force` | On `hot balance`, `hot send-trx`, `hot send-usdt`, `hot activate` only: skip the interactive confirmation when `--network` differs from networks already recorded in the wallet file (see below). |
+| Env / flag                               | Purpose                                                                                                                                                                                           |
+|------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Optional TronGrid API key (recommended for higher rate limits).                                                                                                                                   |
+| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Hot wallet files directory (default: `~/.config/monujo/keystore`).                                                                                                                                |
+| `MONUJO_IMPORT_KEY`                      | Hex private key for `hot import` if `--key-hex` is omitted.                                                                                                                                       |
+| `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).                                                                                                                                 |
+| `--output`                               | `table` or `json`.                                                                                                                                                                                |
+| `--http-url` / `--grpc-url`              | Override TronGrid HTTP base URL and gRPC `host:port`.                                                                                                                                             |
+| `--force`                                | On `hot balance`, `hot send-trx`, `hot send-usdt`, `hot activate` only: skip the interactive confirmation when `--network` differs from networks already recorded in the wallet file (see below). |
 
 ## Watch-only (cold address, online PC)
 
@@ -94,9 +94,35 @@ Hot sends use **gRPC** to a Tron full node (default `grpc.trongrid.io:50051` on 
 - Amount parsing avoids `float64` for token math; USDT/TRX amounts are handled as integers / decimals via strings.
 - USDT contract addresses: **mainnet** `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`; **Shasta** uses the test token address baked into `internal/tron/constants.go` (not official mainnet Tether).
 
-## Planned next: offline signer
+## Offline signing (air-gap)
 
-Versioned JSON envelopes live in `internal/transfer` (`UnsignedTransferRequest`, `SignedTransferResponse`) for a future air-gap flow: build unsigned tx online → sign JSON offline → broadcast signed tx online. Not implemented in this milestone.
+For cold-storage workflows the keystore can live exclusively on an **offline** machine. Three commands carry a transfer across the air gap:
+
+```bash
+# Online PC #1 (no keystore needed): fetch a fresh ref-block, build unsigned tx
+./build/monujo offline build \
+    --from-address T...cold --to T...recipient \
+    --amount 12.5 --kind trx \
+    --out tx.unsigned.json \
+    [--hmac-passphrase-env MONUJO_HMAC]
+
+# Offline PC (keystore + private key live HERE only): sign the file
+./build/monujo offline sign \
+    --in tx.unsigned.json --name cold --out tx.signed.json \
+    [--hmac-passphrase-env MONUJO_HMAC]
+
+# Online PC #2 (no keystore needed): broadcast
+./build/monujo offline broadcast --in tx.signed.json
+```
+
+Both TRX (`--kind trx`) and USDT (`--kind usdt`) are supported. Tron's `ref_block` / `expiration` give a ~60 second window between `build` and `broadcast`; an expired file must be rebuilt online.
+
+Two layers protect the file in transit:
+
+- **Visual confirmation.** Before signing and before broadcasting, monujo recomputes all human-readable fields (`from`, `to`, `amount`, `contract`, `expiration`, `tx_id`) from the embedded `raw_data` and prints them along with the file SHA-256, then asks `[y/N]` (use `--yes` for scripts).
+- **Optional HMAC-SHA256.** Pass `--hmac-passphrase` (or `--hmac-passphrase-env`) on both ends; the key is derived via scrypt and the envelope is rejected on mismatch.
+
+See [docs/10-offline-commands.md](docs/10-offline-commands.md) for a step-by-step walk-through and the on-disk envelope format.
 
 ## License
 

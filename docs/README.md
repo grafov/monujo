@@ -12,17 +12,18 @@
 
 ## Содержание
 
-| Раздел | О чём |
-|--------|-------|
-| [01 — Обзор и архитектура](01-overview.md) | Что делает программа, из каких компонентов состоит, модель угроз. |
-| [02 — Сборка и установка](02-installation.md) | Требования к окружению, `make build`, установка бинарника, версии. |
-| [03 — Глобальная конфигурация](03-configuration.md) | Все глобальные флаги (`--network`, `--output`, `--http-url`, `--grpc-url`, `--api-key`, `--keystore-dir`) и переменные окружения. |
-| [04 — Команды `watch`](04-watch-commands.md) | Подробный справочник по `watch balance` и `watch txs`. |
-| [05 — Команды `hot`](05-hot-commands.md) | Подробный справочник по `hot list`, `hot create`, `hot import`, `hot activate`, `hot balance`, `hot send-trx`, `hot send-usdt`. |
-| [06 — Хранилище ключей](06-keystore.md) | Формат файла keystore v1, KDF/шифрование, права доступа, метаданные сетей. |
-| [07 — Сети и контракты](07-networks.md) | Mainnet и Shasta, эндпойнты по умолчанию, адреса контрактов USDT, лимиты комиссий. |
-| [08 — Типовые сценарии](08-scenarios.md) | Пошаговые рецепты: проверка холодного адреса, создание горячего кошелька, активация, отправка USDT, тестирование на Shasta, скриптовое использование. |
-| [09 — Устранение неполадок](09-troubleshooting.md) | Расшифровка ошибок и способы их обхода. |
+| Раздел                                              | О чём                                                                                                                                                 |
+|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [01 — Обзор и архитектура](01-overview.md)          | Что делает программа, из каких компонентов состоит, модель угроз.                                                                                     |
+| [02 — Сборка и установка](02-installation.md)       | Требования к окружению, `make build`, установка бинарника, версии.                                                                                    |
+| [03 — Глобальная конфигурация](03-configuration.md) | Все глобальные флаги (`--network`, `--output`, `--http-url`, `--grpc-url`, `--api-key`, `--keystore-dir`) и переменные окружения.                     |
+| [04 — Команды `watch`](04-watch-commands.md)        | Подробный справочник по `watch balance` и `watch txs`.                                                                                                |
+| [05 — Команды `hot`](05-hot-commands.md)            | Подробный справочник по `hot list`, `hot create`, `hot import`, `hot activate`, `hot balance`, `hot send-trx`, `hot send-usdt`.                       |
+| [06 — Хранилище ключей](06-keystore.md)             | Формат файла keystore v1, KDF/шифрование, права доступа, метаданные сетей.                                                                            |
+| [07 — Сети и контракты](07-networks.md)             | Mainnet и Shasta, эндпойнты по умолчанию, адреса контрактов USDT, лимиты комиссий.                                                                    |
+| [08 — Типовые сценарии](08-scenarios.md)            | Пошаговые рецепты: проверка холодного адреса, создание горячего кошелька, активация, отправка USDT, тестирование на Shasta, скриптовое использование. |
+| [09 — Устранение неполадок](09-troubleshooting.md)  | Расшифровка ошибок и способы их обхода.                                                                                                               |
+| [10 — Команды `offline`](10-offline-commands.md)    | Air-gap сценарий: `offline build` (онлайн), `offline sign` (офлайн), `offline broadcast` (онлайн); формат конверта, HMAC, изоляция keystore.          |
 
 ## Краткая шпаргалка
 
@@ -50,6 +51,11 @@ make build                                    # бинарник build/monujo
 
 # Машинно-читаемый вывод
 ./build/monujo --output json watch balance --addr T...
+
+# Air-gap (оффлайн-подпись)
+./build/monujo offline build      --from-address T...cold --to T...rcpt --amount 12.5 --kind trx --out tx.unsigned.json
+./build/monujo offline sign       --in tx.unsigned.json --name cold --out tx.signed.json   # на офлайн-ПК
+./build/monujo offline broadcast  --in tx.signed.json
 ```
 
 ## Важные предупреждения
