@@ -367,6 +367,77 @@ func TestLoadRejectsInconsistent(t *testing.T) {
 	}
 }
 
+func TestStoreLoadPassphraseNFDvsNFC(t *testing.T) {
+	dir := t.TempDir()
+	priv, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+	nfd := []byte("cafe\u0301-pass-1")
+	defer ZeroPassphrase(nfd)
+
+	addr, err := Store(dir, "u1", hexKey, nfd, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nfc := []byte("caf\u00e9-pass-1")
+	defer ZeroPassphrase(nfc)
+	pk, err := LoadPrivateKey(dir, "u1", nfc)
+	if err != nil {
+		t.Fatalf("NFC must unlock NFD-encrypted wallet: %v", err)
+	}
+	defer pk.Wipe()
+	if pk.Address != addr {
+		t.Fatalf("address mismatch: want %s, got %s", addr, pk.Address)
+	}
+}
+
+func TestStoreLoadPassphraseLigatureCompat(t *testing.T) {
+	dir := t.TempDir()
+	priv, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+	withLig := []byte("\uFB01le-secret")
+	defer ZeroPassphrase(withLig)
+
+	if _, err := Store(dir, "u2", hexKey, withLig, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	ascii := []byte("file-secret")
+	defer ZeroPassphrase(ascii)
+	pk, err := LoadPrivateKey(dir, "u2", ascii)
+	if err != nil {
+		t.Fatalf("ASCII must unlock ligature-encrypted wallet (NFKC compat): %v", err)
+	}
+	defer pk.Wipe()
+}
+
+func TestStoreLoadPassphraseWrongNonASCII(t *testing.T) {
+	dir := t.TempDir()
+	priv, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+	good := []byte("\u043f\u0430\u0440\u043e\u043b\u044c")
+	defer ZeroPassphrase(good)
+
+	if _, err := Store(dir, "u3", hexKey, good, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	bad := []byte("\u043f\u0430\u0440\u043e\u043b\u044c1")
+	defer ZeroPassphrase(bad)
+	if _, err := LoadPrivateKey(dir, "u3", bad); err == nil {
+		t.Fatal("expected decryption failure for distinct non-ASCII passphrase")
+	}
+}
+
 func TestEnsureNetworkRecordedWorksOnV1AndV2(t *testing.T) {
 	dir := t.TempDir()
 	priv, err := crypto.GenerateKey()

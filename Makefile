@@ -31,7 +31,7 @@ build:
 
 .PHONY: docker-build
 docker-build: # just set token into GITHUB_TOKEN environment variable
-	docker build -f Dockerfile -t local:$(PRJ) --secret id=github_token,env=GITHUB_TOKEN .
+	docker build -f Dockerfile -t local:$(PRJ) --secret id=github_token,env=GITHUB_TOcKEN .
 
 .PHONY: test
 test:

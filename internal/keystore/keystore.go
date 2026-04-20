@@ -375,7 +375,9 @@ func buildV2Envelope(addr string, plain, passphrase []byte, networks []string) (
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
 		return zero, err
 	}
-	dk := argon2.IDKey(passphrase, salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	normPass := NormalizePassphrase(passphrase)
+	defer zeroBytes(normPass)
+	dk := argon2.IDKey(normPass, salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
 	defer zeroBytes(dk)
 
 	block, err := aes.NewCipher(dk)
@@ -502,11 +504,14 @@ func validateVersionKDF(version int, kdf string) error {
 // decryptWalletData runs the correct KDF (scrypt for v1, argon2id for v2) and
 // performs AES-256-GCM open. The returned plaintext must be zeroed by the caller.
 func decryptWalletData(ew EncryptedWalletFile, salt, nonce, data, passphrase []byte) ([]byte, error) {
+	normPass := NormalizePassphrase(passphrase)
+	defer zeroBytes(normPass)
+
 	var dk []byte
 	switch ew.KDF {
 	case kdfScrypt:
 		var err error
-		dk, err = scrypt.Key(passphrase, salt, ew.N, ew.R, ew.P, 32)
+		dk, err = scrypt.Key(normPass, salt, ew.N, ew.R, ew.P, 32)
 		if err != nil {
 			return nil, err
 		}
@@ -514,7 +519,7 @@ func decryptWalletData(ew EncryptedWalletFile, salt, nonce, data, passphrase []b
 		if ew.Argon2KeyLen == 0 || ew.Argon2Time == 0 || ew.Argon2Memory == 0 || ew.Argon2Threads == 0 {
 			return nil, fmt.Errorf("keystore v2: missing argon2id parameters")
 		}
-		dk = argon2.IDKey(passphrase, salt, ew.Argon2Time, ew.Argon2Memory, ew.Argon2Threads, ew.Argon2KeyLen)
+		dk = argon2.IDKey(normPass, salt, ew.Argon2Time, ew.Argon2Memory, ew.Argon2Threads, ew.Argon2KeyLen)
 	default:
 		return nil, fmt.Errorf("unsupported kdf %q", ew.KDF)
 	}

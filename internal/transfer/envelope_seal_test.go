@@ -127,3 +127,52 @@ func TestDeriveHMACKeyEmpty(t *testing.T) {
 	}
 }
 
+func TestDeriveHMACKeyNormalizedAcrossForms(t *testing.T) {
+	nfd, err := DeriveHMACKey([]byte("cafe\u0301"))
+	if err != nil {
+		t.Fatalf("nfd: %v", err)
+	}
+	nfc, err := DeriveHMACKey([]byte("caf\u00e9"))
+	if err != nil {
+		t.Fatalf("nfc: %v", err)
+	}
+	if !bytes.Equal(nfd, nfc) {
+		t.Fatalf("NFD and NFC forms of same passphrase must yield the same HMAC key: nfd=%x nfc=%x", nfd, nfc)
+	}
+
+	lig, err := DeriveHMACKey([]byte("\uFB01ne"))
+	if err != nil {
+		t.Fatalf("ligature: %v", err)
+	}
+	plain, err := DeriveHMACKey([]byte("fine"))
+	if err != nil {
+		t.Fatalf("plain: %v", err)
+	}
+	if !bytes.Equal(lig, plain) {
+		t.Fatalf("ligature and ASCII forms must yield the same HMAC key (NFKC compat): lig=%x plain=%x", lig, plain)
+	}
+}
+
+func TestSealOpenPassphraseNormalizedAcrossForms(t *testing.T) {
+	sealKey, err := DeriveHMACKey([]byte("cafe\u0301-offline"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	openKey, err := DeriveHMACKey([]byte("caf\u00e9-offline"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("hello")
+	env, err := SealPayload(KindUnsignedTransfer, payload, sealKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := OpenEnvelope(env, KindUnsignedTransfer, openKey)
+	if err != nil {
+		t.Fatalf("OpenEnvelope with NFC passphrase must unseal NFD-sealed envelope: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("payload mismatch: want %q, got %q", payload, got)
+	}
+}
+

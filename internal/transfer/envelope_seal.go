@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	"golang.org/x/crypto/scrypt"
+
+	"github.com/grafov/monujo/internal/keystore"
 )
 
 // Envelope kinds.
@@ -61,17 +63,24 @@ type FileFingerprint struct {
 }
 
 // DeriveHMACKey derives a 32-byte HMAC key from a user passphrase using
-// scrypt with a fixed salt. Returns an error only if the underlying scrypt
-// call rejects parameters; for the constants used here it never does, but
-// errors are still propagated for forward compatibility.
+// scrypt with a fixed salt. The passphrase is Unicode NFKC-normalized via
+// [keystore.NormalizePassphrase] before the KDF so that the same visual
+// password produces the same key across operating systems and input methods
+// (per NIST SP 800-63B §5.1.1.2 and the OWASP Password Storage Cheat Sheet).
 //
-// The passphrase is not zeroed by this function; callers should wipe it
-// after use (see [keystore.ZeroPassphrase]).
+// Returns an error only if the underlying scrypt call rejects parameters;
+// for the constants used here it never does, but errors are still
+// propagated for forward compatibility.
+//
+// The input passphrase is not zeroed by this function; callers should wipe
+// it after use (see [keystore.ZeroPassphrase]).
 func DeriveHMACKey(passphrase []byte) ([]byte, error) {
 	if len(passphrase) == 0 {
 		return nil, errors.New("hmac passphrase must not be empty")
 	}
-	dk, err := scrypt.Key(passphrase, []byte(hmacScryptSaltStr), hmacScryptN, hmacScryptR, hmacScryptP, hmacKeyLen)
+	normPass := keystore.NormalizePassphrase(passphrase)
+	defer keystore.ZeroPassphrase(normPass)
+	dk, err := scrypt.Key(normPass, []byte(hmacScryptSaltStr), hmacScryptN, hmacScryptR, hmacScryptP, hmacKeyLen)
 	if err != nil {
 		return nil, fmt.Errorf("derive hmac key: %w", err)
 	}
