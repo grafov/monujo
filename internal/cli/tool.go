@@ -108,12 +108,14 @@ func runGenpass(w io.Writer, a genpassArgs) error {
 	defer keystore.ZeroPassphrase(phrase)
 
 	passphrase.PrintInputMethodWarning(w, id)
-	fmt.Fprintln(w, "Generated passphrase (shown once, not stored):")
+	// Not a bug: passphrase specially enclosed by two empty strings for better visibility
+	// on the screen.
+	fmt.Fprint(w, "Generated passphrase (shown once, not stored):\n\n")
 	if _, err := w.Write(phrase); err != nil {
 		return err
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "Estimated entropy: %.1f bits (%d words from %q).\n", bits, a.words, id)
+	fmt.Fprintf(w, "\nEstimated entropy: %.1f bits (%d words from %q).\n", bits, a.words, id)
 	if bits < passphrase.MinEntropyBits {
 		fmt.Fprintf(w, "warning: estimated entropy %.1f bits is below the recommended %.0f bits.\n",
 			bits, passphrase.MinEntropyBits)

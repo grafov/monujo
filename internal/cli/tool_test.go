@@ -2,167 +2,139 @@ package cli
 
 import (
 	"bytes"
-	"strings"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestRunGenpassNonTTYRefusedWithoutFlag(t *testing.T) {
-	var buf bytes.Buffer
-	err := runGenpass(&buf, genpassArgs{
-		words:     7,
-		separator: " ",
-		dict:      "english",
+var _ = Describe("runGenpass", func() {
+	It("rejects non-TTY output without override", func() {
+		var buf bytes.Buffer
+		err := runGenpass(&buf, genpassArgs{
+			words:     7,
+			separator: " ",
+			dict:      "english",
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("non-TTY"))
 	})
-	if err == nil {
-		t.Fatal("expected error when writer is not a TTY and --allow-non-tty is false")
-	}
-	if !strings.Contains(err.Error(), "non-TTY") {
-		t.Errorf("error message does not mention TTY: %v", err)
-	}
-}
 
-func TestRunGenpassAllowNonTTY(t *testing.T) {
-	var buf bytes.Buffer
-	err := runGenpass(&buf, genpassArgs{
-		words:       5,
-		separator:   " ",
-		dict:        "english",
-		allowNonTTY: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "Generated passphrase") {
-		t.Errorf("expected generated-passphrase header, got: %s", out)
-	}
-	if !strings.Contains(out, "Estimated entropy") {
-		t.Errorf("expected entropy line, got: %s", out)
-	}
-}
-
-func TestRunGenpassWordsTooFew(t *testing.T) {
-	var buf bytes.Buffer
-	err := runGenpass(&buf, genpassArgs{
-		words:       3,
-		separator:   " ",
-		dict:        "english",
-		allowNonTTY: true,
-	})
-	if err == nil {
-		t.Fatal("expected error for words < 4")
-	}
-}
-
-func TestRunGenpassUnknownDict(t *testing.T) {
-	var buf bytes.Buffer
-	err := runGenpass(&buf, genpassArgs{
-		words:       7,
-		separator:   " ",
-		dict:        "klingon",
-		allowNonTTY: true,
-	})
-	if err == nil {
-		t.Fatal("expected error for unknown dict")
-	}
-}
-
-func TestRunGenpassInputMethodWarningEsperanto(t *testing.T) {
-	var buf bytes.Buffer
-	err := runGenpass(&buf, genpassArgs{
-		words:       5,
-		separator:   " ",
-		dict:        "esperanto",
-		allowNonTTY: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf.String(), "Esperanto diacritics") {
-		t.Errorf("expected esperanto input-method warning, got: %s", buf.String())
-	}
-}
-
-func TestRunGenpassInputMethodWarningRussian(t *testing.T) {
-	var buf bytes.Buffer
-	err := runGenpass(&buf, genpassArgs{
-		words:       5,
-		separator:   " ",
-		dict:        "russian",
-		allowNonTTY: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "Cyrillic") || !strings.Contains(out, "ё (U+0451)") {
-		t.Errorf("expected russian input-method warning, got: %s", out)
-	}
-}
-
-func TestRunGenpassNoWarningForAsciiDicts(t *testing.T) {
-	for _, dict := range []string{"english", "english-short", "esperanto-x"} {
+	It("works with allow-non-tty", func() {
 		var buf bytes.Buffer
 		err := runGenpass(&buf, genpassArgs{
 			words:       5,
 			separator:   " ",
-			dict:        dict,
+			dict:        "english",
 			allowNonTTY: true,
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		Expect(err).NotTo(HaveOccurred())
+
 		out := buf.String()
-		if strings.Contains(out, "WARNING:") {
-			t.Errorf("%s: unexpected warning in output: %s", dict, out)
+		Expect(out).To(ContainSubstring("Generated passphrase"))
+		Expect(out).To(ContainSubstring("Estimated entropy"))
+	})
+
+	It("rejects words less than 4", func() {
+		var buf bytes.Buffer
+		err := runGenpass(&buf, genpassArgs{
+			words:       3,
+			separator:   " ",
+			dict:        "english",
+			allowNonTTY: true,
+		})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects unknown dictionary", func() {
+		var buf bytes.Buffer
+		err := runGenpass(&buf, genpassArgs{
+			words:       7,
+			separator:   " ",
+			dict:        "klingon",
+			allowNonTTY: true,
+		})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("prints Esperanto warning", func() {
+		var buf bytes.Buffer
+		err := runGenpass(&buf, genpassArgs{
+			words:       5,
+			separator:   " ",
+			dict:        "esperanto",
+			allowNonTTY: true,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(buf.String()).To(ContainSubstring("Esperanto diacritics"))
+	})
+
+	It("prints Russian warning", func() {
+		var buf bytes.Buffer
+		err := runGenpass(&buf, genpassArgs{
+			words:       5,
+			separator:   " ",
+			dict:        "russian",
+			allowNonTTY: true,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		out := buf.String()
+		Expect(out).To(ContainSubstring("Cyrillic"))
+		Expect(out).To(ContainSubstring("ё (U+0451)"))
+	})
+
+	It("does not print warnings for ASCII dictionaries", func() {
+		for _, dict := range []string{"english", "english-short", "esperanto-x"} {
+			var buf bytes.Buffer
+			err := runGenpass(&buf, genpassArgs{
+				words:       5,
+				separator:   " ",
+				dict:        dict,
+				allowNonTTY: true,
+			})
+			Expect(err).NotTo(HaveOccurred(), dict)
+			Expect(buf.String()).NotTo(ContainSubstring("WARNING:"), dict)
 		}
-	}
-}
+	})
+})
 
-func TestObtainNewKeystorePassphrase_disabledFallsThrough(t *testing.T) {
-	// When Enabled=false, obtainNewKeystorePassphrase must call
-	// readPassTwice which needs a terminal. We cannot exercise the
-	// happy path from a test; we only verify that the code path does
-	// not panic when we flip Enabled on with allow-non-tty+bogus dict.
-	var buf bytes.Buffer
-	_, err := obtainNewKeystorePassphrase(&buf, generateFlags{
-		Enabled:     true,
-		Words:       5,
-		Dict:        "english",
-		Separator:   " ",
-		AllowNonTTY: true,
-	}, "ignored")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf.String(), "Generated passphrase") {
-		t.Errorf("expected generated-passphrase header, got: %s", buf.String())
-	}
-}
+var _ = Describe("obtainNewKeystorePassphrase", func() {
+	It("returns generated passphrase when enabled in non-TTY mode with override", func() {
+		// When Enabled=false, obtainNewKeystorePassphrase eventually calls
+		// readPassTwice which requires an interactive terminal. Here we only
+		// validate the generate path.
+		var buf bytes.Buffer
+		_, err := obtainNewKeystorePassphrase(&buf, generateFlags{
+			Enabled:     true,
+			Words:       5,
+			Dict:        "english",
+			Separator:   " ",
+			AllowNonTTY: true,
+		}, "ignored")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(buf.String()).To(ContainSubstring("Generated passphrase"))
+	})
 
-func TestObtainNewKeystorePassphrase_invalidWordsRejected(t *testing.T) {
-	var buf bytes.Buffer
-	_, err := obtainNewKeystorePassphrase(&buf, generateFlags{
-		Enabled:     true,
-		Words:       2,
-		Dict:        "english",
-		Separator:   " ",
-		AllowNonTTY: true,
-	}, "ignored")
-	if err == nil {
-		t.Fatal("expected error for --generate-words < 4")
-	}
-}
+	It("rejects invalid word count", func() {
+		var buf bytes.Buffer
+		_, err := obtainNewKeystorePassphrase(&buf, generateFlags{
+			Enabled:     true,
+			Words:       2,
+			Dict:        "english",
+			Separator:   " ",
+			AllowNonTTY: true,
+		}, "ignored")
+		Expect(err).To(HaveOccurred())
+	})
 
-func TestObtainNewKeystorePassphrase_nonTTYRequiresOverride(t *testing.T) {
-	var buf bytes.Buffer
-	_, err := obtainNewKeystorePassphrase(&buf, generateFlags{
-		Enabled:   true,
-		Words:     5,
-		Dict:      "english",
-		Separator: " ",
-	}, "ignored")
-	if err == nil {
-		t.Fatal("expected error when writer is not a TTY and --generate-allow-non-tty is false")
-	}
-}
+	It("requires allow-non-tty override for non-terminal output", func() {
+		var buf bytes.Buffer
+		_, err := obtainNewKeystorePassphrase(&buf, generateFlags{
+			Enabled:   true,
+			Words:     5,
+			Dict:      "english",
+			Separator: " ",
+		}, "ignored")
+		Expect(err).To(HaveOccurred())
+	})
+})

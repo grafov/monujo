@@ -2,32 +2,26 @@ package domain
 
 import (
 	"math/big"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestParseUSDTDecimal(t *testing.T) {
-	v, err := ParseUSDTDecimal("1.5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if v.String() != "1500000" {
-		t.Fatalf("got %s", v.String())
-	}
-}
+var _ = Describe("asset parsing and formatting", func() {
+	It("parses USDT decimal amounts", func() {
+		v, err := ParseUSDTDecimal("1.5")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(v.String()).To(Equal("1500000"))
+	})
 
-func TestParseTRXDecimal(t *testing.T) {
-	sun, err := ParseTRXDecimal("2.5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sun != 2500000 {
-		t.Fatalf("got %d", sun)
-	}
-}
+	It("parses TRX decimal amounts to sun", func() {
+		sun, err := ParseTRXDecimal("2.5")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sun).To(Equal(int64(2500000)))
+	})
 
-func TestFormatMinimalUSDT(t *testing.T) {
-	s := FormatMinimalUSDT(big.NewInt(1500000))
-	if s != "1.5" {
-		t.Fatalf("got %q", s)
-	}
-}
+	It("formats minimal USDT amounts", func() {
+		s := FormatMinimalUSDT(big.NewInt(1500000))
+		Expect(s).To(Equal("1.5"))
+	})
+})

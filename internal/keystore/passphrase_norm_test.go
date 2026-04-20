@@ -2,58 +2,49 @@ package keystore
 
 import (
 	"bytes"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestNormalizePassphraseASCIIIdempotent(t *testing.T) {
-	in := []byte("hello-world-123")
-	out := NormalizePassphrase(in)
-	if !bytes.Equal(in, out) {
-		t.Fatalf("ASCII input must be unchanged: in=%q out=%q", in, out)
-	}
-	if len(in) > 0 && len(out) > 0 && &in[0] == &out[0] {
-		t.Fatal("NormalizePassphrase must return a fresh allocation, not alias input")
-	}
+var _ = Describe("NormalizePassphrase", func() {
+	It("keeps ASCII input unchanged and returns a fresh allocation", func() {
+		in := []byte("hello-world-123")
+		out := NormalizePassphrase(in)
+		Expect(bytes.Equal(in, out)).To(BeTrue())
 
-	ZeroPassphrase(out)
-	if !bytes.Equal(in, []byte("hello-world-123")) {
-		t.Fatalf("zeroing output must not affect original: in=%q", in)
-	}
-}
+		if len(in) > 0 && len(out) > 0 {
+			Expect(&in[0] == &out[0]).To(BeFalse())
+		}
 
-func TestNormalizePassphraseNFDtoNFC(t *testing.T) {
-	nfd := []byte("cafe\u0301")
-	nfc := []byte("caf\u00e9")
-	got := NormalizePassphrase(nfd)
-	if !bytes.Equal(got, nfc) {
-		t.Fatalf("NFD→NFC: want %q (%x), got %q (%x)", nfc, nfc, got, got)
-	}
-}
+		ZeroPassphrase(out)
+		Expect(bytes.Equal(in, []byte("hello-world-123"))).To(BeTrue())
+	})
 
-func TestNormalizePassphraseLigature(t *testing.T) {
-	lig := []byte("\uFB01ne")
-	want := []byte("fine")
-	got := NormalizePassphrase(lig)
-	if !bytes.Equal(got, want) {
-		t.Fatalf("ligature fi should decompose: want %q (%x), got %q (%x)", want, want, got, got)
-	}
-}
+	It("normalizes NFD to NFC", func() {
+		nfd := []byte("cafe\u0301")
+		nfc := []byte("caf\u00e9")
+		got := NormalizePassphrase(nfd)
+		Expect(bytes.Equal(got, nfc)).To(BeTrue())
+	})
 
-func TestNormalizePassphraseFullwidth(t *testing.T) {
-	full := []byte("\uFF50\uFF41\uFF53\uFF53")
-	want := []byte("pass")
-	got := NormalizePassphrase(full)
-	if !bytes.Equal(got, want) {
-		t.Fatalf("full-width → half-width: want %q (%x), got %q (%x)", want, want, got, got)
-	}
-}
+	It("normalizes ligatures", func() {
+		lig := []byte("\uFB01ne")
+		want := []byte("fine")
+		got := NormalizePassphrase(lig)
+		Expect(bytes.Equal(got, want)).To(BeTrue())
+	})
 
-func TestNormalizePassphraseEmpty(t *testing.T) {
-	got := NormalizePassphrase(nil)
-	if got == nil {
-		t.Fatal("must return non-nil slice (even if empty) to keep zeroing logic uniform")
-	}
-	if len(got) != 0 {
-		t.Fatalf("empty input must produce empty output, got %q", got)
-	}
-}
+	It("normalizes full-width forms", func() {
+		full := []byte("\uFF50\uFF41\uFF53\uFF53")
+		want := []byte("pass")
+		got := NormalizePassphrase(full)
+		Expect(bytes.Equal(got, want)).To(BeTrue())
+	})
+
+	It("returns an empty non-nil slice for empty input", func() {
+		got := NormalizePassphrase(nil)
+		Expect(got).NotTo(BeNil())
+		Expect(got).To(HaveLen(0))
+	})
+})

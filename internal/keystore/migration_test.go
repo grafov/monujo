@@ -11,10 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"golang.org/x/crypto/scrypt"
 )
 
@@ -29,43 +30,36 @@ const (
 
 // writeV1ScryptWallet produces a v1 scrypt+AES-256-GCM file exactly as
 // pre-migration monujo releases did. Used by migration tests.
-func writeV1ScryptWallet(t *testing.T, dir, name string, privHex string, passphrase []byte, networks []string) string {
-	t.Helper()
+func writeV1ScryptWallet(dir, name, privHex string, passphrase []byte, networks []string) string {
+	GinkgoHelper()
+
 	raw, err := hex.DecodeString(strings.TrimPrefix(privHex, "0x"))
-	if err != nil {
-		t.Fatalf("decode priv hex: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
+
 	priv, err := crypto.ToECDSA(raw)
-	if err != nil {
-		t.Fatalf("to ecdsa: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	addr := address.PubkeyToAddress(priv.PublicKey).String()
 
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	salt := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		t.Fatalf("salt: %v", err)
-	}
-	dk, err := scrypt.Key(passphrase, salt, scryptN, scryptR, scryptP, 32)
-	if err != nil {
-		t.Fatalf("scrypt: %v", err)
-	}
-	block, err := aes.NewCipher(dk)
-	if err != nil {
-		t.Fatalf("cipher: %v", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		t.Fatalf("gcm: %v", err)
-	}
-	nonce := make([]byte, nonceLen)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		t.Fatalf("nonce: %v", err)
-	}
-	ciphertext := gcm.Seal(nil, nonce, raw, nil)
+	Expect(os.MkdirAll(dir, 0o700)).To(Succeed())
 
+	salt := make([]byte, 32)
+	_, err = io.ReadFull(rand.Reader, salt)
+	Expect(err).NotTo(HaveOccurred())
+
+	dk, err := scrypt.Key(passphrase, salt, scryptN, scryptR, scryptP, 32)
+	Expect(err).NotTo(HaveOccurred())
+
+	block, err := aes.NewCipher(dk)
+	Expect(err).NotTo(HaveOccurred())
+
+	gcm, err := cipher.NewGCM(block)
+	Expect(err).NotTo(HaveOccurred())
+
+	nonce := make([]byte, nonceLen)
+	_, err = io.ReadFull(rand.Reader, nonce)
+	Expect(err).NotTo(HaveOccurred())
+
+	ciphertext := gcm.Seal(nil, nonce, raw, nil)
 	ew := EncryptedWalletFile{
 		Version:  fileVersionLegacyScrypt,
 		Address:  addr,
@@ -79,398 +73,322 @@ func writeV1ScryptWallet(t *testing.T, dir, name string, privHex string, passphr
 		NonceHex: hex.EncodeToString(nonce),
 		DataHex:  hex.EncodeToString(ciphertext),
 	}
+
 	body, err := json.MarshalIndent(ew, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
+
 	path := filepath.Join(dir, safeName(name)+".json")
-	if err := os.WriteFile(path, body, 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
+	Expect(os.WriteFile(path, body, 0o600)).To(Succeed())
 	return addr
 }
 
-func readWalletJSON(t *testing.T, dir, name string) EncryptedWalletFile {
-	t.Helper()
+func readWalletJSON(dir, name string) EncryptedWalletFile {
+	GinkgoHelper()
+
 	body, err := os.ReadFile(filepath.Join(dir, safeName(name)+".json"))
-	if err != nil {
-		t.Fatalf("read wallet: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
+
 	var ew EncryptedWalletFile
-	if err := json.Unmarshal(body, &ew); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	Expect(json.Unmarshal(body, &ew)).To(Succeed())
 	return ew
 }
 
-func TestStoreWritesV2Argon2id(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	pass := []byte("test-passphrase-32-chars-long!!")
-	defer ZeroPassphrase(pass)
+var _ = Describe("keystore migration and compatibility", func() {
+	It("stores new files as v2 argon2id", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
 
-	if _, err := Store(dir, "new1", hexKey, pass, []string{"mainnet"}); err != nil {
-		t.Fatal(err)
-	}
-	ew := readWalletJSON(t, dir, "new1")
-	if ew.Version != fileVersion {
-		t.Fatalf("version: want %d, got %d", fileVersion, ew.Version)
-	}
-	if ew.KDF != kdfArgon2id {
-		t.Fatalf("kdf: want %q, got %q", kdfArgon2id, ew.KDF)
-	}
-	if ew.Argon2Time == 0 || ew.Argon2Memory == 0 || ew.Argon2Threads == 0 || ew.Argon2KeyLen == 0 {
-		t.Fatalf("argon2 params empty: %+v", ew)
-	}
-	if ew.N != 0 || ew.R != 0 || ew.P != 0 {
-		t.Fatalf("scrypt legacy params should be zero: %+v", ew)
-	}
-	if ew.Cipher != cipherAES256GCM {
-		t.Fatalf("cipher: %q", ew.Cipher)
-	}
-	salt, err := hex.DecodeString(ew.SaltHex)
-	if err != nil {
-		t.Fatalf("salt hex: %v", err)
-	}
-	if len(salt) != saltLen {
-		t.Fatalf("salt len: want %d, got %d", saltLen, len(salt))
-	}
-}
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		pass := []byte("test-passphrase-32-chars-long!!")
+		defer ZeroPassphrase(pass)
 
-func TestLoadV1ScryptAutoMigrates(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	pass := []byte("test-passphrase-32-chars-long!!")
-	defer ZeroPassphrase(pass)
+		_, err = Store(dir, "new1", hexKey, pass, []string{"mainnet"})
+		Expect(err).NotTo(HaveOccurred())
 
-	wantAddr := writeV1ScryptWallet(t, dir, "legacy", hexKey, pass, []string{"mainnet"})
+		ew := readWalletJSON(dir, "new1")
+		Expect(ew.Version).To(Equal(fileVersion))
+		Expect(ew.KDF).To(Equal(kdfArgon2id))
+		Expect(ew.Argon2Time).To(BeNumerically(">", 0))
+		Expect(ew.Argon2Memory).To(BeNumerically(">", 0))
+		Expect(ew.Argon2Threads).To(BeNumerically(">", 0))
+		Expect(ew.Argon2KeyLen).To(BeNumerically(">", 0))
+		Expect(ew.N).To(Equal(0))
+		Expect(ew.R).To(Equal(0))
+		Expect(ew.P).To(Equal(0))
+		Expect(ew.Cipher).To(Equal(cipherAES256GCM))
 
-	var warn bytes.Buffer
-	prev := migrationWarnWriter
-	migrationWarnWriter = &warn
-	defer func() { migrationWarnWriter = prev }()
+		salt, err := hex.DecodeString(ew.SaltHex)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(salt)).To(Equal(saltLen))
+	})
 
-	pk, err := LoadPrivateKey(dir, "legacy", pass)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	defer pk.Wipe()
-	if pk.Address != wantAddr {
-		t.Fatalf("address: want %s, got %s", wantAddr, pk.Address)
-	}
-	if !strings.Contains(warn.String(), "migrated wallet") {
-		t.Fatalf("expected migration note in stderr, got %q", warn.String())
-	}
+	It("auto-migrates v1 scrypt wallet on successful load", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
 
-	ew := readWalletJSON(t, dir, "legacy")
-	if ew.Version != fileVersion {
-		t.Fatalf("after migrate: version want %d, got %d", fileVersion, ew.Version)
-	}
-	if ew.KDF != kdfArgon2id {
-		t.Fatalf("after migrate: kdf want %q, got %q", kdfArgon2id, ew.KDF)
-	}
-	if ew.N != 0 || ew.R != 0 || ew.P != 0 {
-		t.Fatalf("after migrate: scrypt params must be zero: %+v", ew)
-	}
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		pass := []byte("test-passphrase-32-chars-long!!")
+		defer ZeroPassphrase(pass)
 
-	backupPath := filepath.Join(dir, safeName("legacy")+legacyBackupSuffix)
-	if _, err := os.Stat(backupPath); err != nil {
-		t.Fatalf("expected backup at %s: %v", backupPath, err)
-	}
-	bkp, err := os.ReadFile(backupPath)
-	if err != nil {
-		t.Fatalf("read backup: %v", err)
-	}
-	var bkpEw EncryptedWalletFile
-	if err := json.Unmarshal(bkp, &bkpEw); err != nil {
-		t.Fatalf("unmarshal backup: %v", err)
-	}
-	if bkpEw.Version != fileVersionLegacyScrypt || bkpEw.KDF != kdfScrypt {
-		t.Fatalf("backup not v1/scrypt: %+v", bkpEw)
-	}
+		wantAddr := writeV1ScryptWallet(dir, "legacy", hexKey, pass, []string{"mainnet"})
 
-	pk2, err := LoadPrivateKey(dir, "legacy", pass)
-	if err != nil {
-		t.Fatalf("reload after migrate: %v", err)
-	}
-	defer pk2.Wipe()
-	if pk2.Address != wantAddr {
-		t.Fatal("reload address mismatch")
-	}
-}
+		var warn bytes.Buffer
+		prev := migrationWarnWriter
+		migrationWarnWriter = &warn
+		DeferCleanup(func() { migrationWarnWriter = prev })
 
-func TestLoadV1ScryptAutoMigratesPreservesNetworks(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	pass := []byte("pw")
-	defer ZeroPassphrase(pass)
+		pk, err := LoadPrivateKey(dir, "legacy", pass)
+		Expect(err).NotTo(HaveOccurred())
+		defer pk.Wipe()
+		Expect(pk.Address).To(Equal(wantAddr))
+		Expect(warn.String()).To(ContainSubstring("migrated wallet"))
 
-	writeV1ScryptWallet(t, dir, "w", hexKey, pass, []string{"shasta", "mainnet"})
-	var warn bytes.Buffer
-	prev := migrationWarnWriter
-	migrationWarnWriter = &warn
-	defer func() { migrationWarnWriter = prev }()
+		ew := readWalletJSON(dir, "legacy")
+		Expect(ew.Version).To(Equal(fileVersion))
+		Expect(ew.KDF).To(Equal(kdfArgon2id))
+		Expect(ew.N).To(Equal(0))
+		Expect(ew.R).To(Equal(0))
+		Expect(ew.P).To(Equal(0))
 
-	pk, err := LoadPrivateKey(dir, "w", pass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pk.Wipe()
+		backupPath := filepath.Join(dir, safeName("legacy")+legacyBackupSuffix)
+		_, err = os.Stat(backupPath)
+		Expect(err).NotTo(HaveOccurred())
 
-	nets, err := ReadWalletNetworks(dir, "w")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(nets) != 2 || nets[0] != "mainnet" || nets[1] != "shasta" {
-		t.Fatalf("networks after migrate: %v", nets)
-	}
-}
+		bkp, err := os.ReadFile(backupPath)
+		Expect(err).NotTo(HaveOccurred())
 
-func TestLoadV1ScryptAutoMigratesBackupCollision(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	pass := []byte("pw")
-	defer ZeroPassphrase(pass)
+		var bkpEw EncryptedWalletFile
+		Expect(json.Unmarshal(bkp, &bkpEw)).To(Succeed())
+		Expect(bkpEw.Version).To(Equal(fileVersionLegacyScrypt))
+		Expect(bkpEw.KDF).To(Equal(kdfScrypt))
 
-	writeV1ScryptWallet(t, dir, "w", hexKey, pass, nil)
-	preexisting := filepath.Join(dir, safeName("w")+legacyBackupSuffix)
-	if err := os.WriteFile(preexisting, []byte("PLACEHOLDER"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+		pk2, err := LoadPrivateKey(dir, "legacy", pass)
+		Expect(err).NotTo(HaveOccurred())
+		defer pk2.Wipe()
+		Expect(pk2.Address).To(Equal(wantAddr))
+	})
 
-	var warn bytes.Buffer
-	prev := migrationWarnWriter
-	migrationWarnWriter = &warn
-	defer func() { migrationWarnWriter = prev }()
+	It("preserves network metadata during auto-migration", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
 
-	pk, err := LoadPrivateKey(dir, "w", pass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pk.Wipe()
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		pass := []byte("pw")
+		defer ZeroPassphrase(pass)
 
-	body, err := os.ReadFile(preexisting)
-	if err != nil {
-		t.Fatalf("read original backup: %v", err)
-	}
-	if string(body) != "PLACEHOLDER" {
-		t.Fatalf("original backup was overwritten: %q", string(body))
-	}
+		writeV1ScryptWallet(dir, "w", hexKey, pass, []string{"shasta", "mainnet"})
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	matched := 0
-	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), safeName("w")+legacyBackupSuffix+".") {
-			matched++
+		var warn bytes.Buffer
+		prev := migrationWarnWriter
+		migrationWarnWriter = &warn
+		DeferCleanup(func() { migrationWarnWriter = prev })
+
+		pk, err := LoadPrivateKey(dir, "w", pass)
+		Expect(err).NotTo(HaveOccurred())
+		defer pk.Wipe()
+
+		nets, err := ReadWalletNetworks(dir, "w")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nets).To(Equal([]string{"mainnet", "shasta"}))
+	})
+
+	It("creates timestamped backup if default backup path already exists", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
+
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		pass := []byte("pw")
+		defer ZeroPassphrase(pass)
+
+		writeV1ScryptWallet(dir, "w", hexKey, pass, nil)
+		preexisting := filepath.Join(dir, safeName("w")+legacyBackupSuffix)
+		Expect(os.WriteFile(preexisting, []byte("PLACEHOLDER"), 0o600)).To(Succeed())
+
+		var warn bytes.Buffer
+		prev := migrationWarnWriter
+		migrationWarnWriter = &warn
+		DeferCleanup(func() { migrationWarnWriter = prev })
+
+		pk, err := LoadPrivateKey(dir, "w", pass)
+		Expect(err).NotTo(HaveOccurred())
+		defer pk.Wipe()
+
+		body, err := os.ReadFile(preexisting)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(body)).To(Equal("PLACEHOLDER"))
+
+		entries, err := os.ReadDir(dir)
+		Expect(err).NotTo(HaveOccurred())
+		matched := 0
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), safeName("w")+legacyBackupSuffix+".") {
+				matched++
+			}
 		}
-	}
-	if matched != 1 {
-		t.Fatalf("want exactly one timestamped backup, got %d; entries: %v", matched, entries)
-	}
-}
+		Expect(matched).To(Equal(1))
+	})
 
-func TestLoadV1ScryptWrongPasswordDoesNotMigrate(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	correct := []byte("right")
-	defer ZeroPassphrase(correct)
-	writeV1ScryptWallet(t, dir, "w", hexKey, correct, nil)
+	It("does not migrate v1 wallet when password is wrong", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
 
-	var warn bytes.Buffer
-	prev := migrationWarnWriter
-	migrationWarnWriter = &warn
-	defer func() { migrationWarnWriter = prev }()
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		correct := []byte("right")
+		defer ZeroPassphrase(correct)
+		writeV1ScryptWallet(dir, "w", hexKey, correct, nil)
 
-	wrong := []byte("bad")
-	defer ZeroPassphrase(wrong)
-	if _, err := LoadPrivateKey(dir, "w", wrong); err == nil {
-		t.Fatal("expected error with wrong password")
-	}
+		var warn bytes.Buffer
+		prev := migrationWarnWriter
+		migrationWarnWriter = &warn
+		DeferCleanup(func() { migrationWarnWriter = prev })
 
-	ew := readWalletJSON(t, dir, "w")
-	if ew.Version != fileVersionLegacyScrypt || ew.KDF != kdfScrypt {
-		t.Fatalf("file should still be v1/scrypt: %+v", ew)
-	}
-	backupPath := filepath.Join(dir, safeName("w")+legacyBackupSuffix)
-	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
-		t.Fatalf("backup must not exist after failed decrypt: err=%v", err)
-	}
-	if warn.Len() != 0 {
-		t.Fatalf("unexpected migration warning on failure: %q", warn.String())
-	}
-}
+		wrong := []byte("bad")
+		defer ZeroPassphrase(wrong)
+		_, err = LoadPrivateKey(dir, "w", wrong)
+		Expect(err).To(HaveOccurred())
 
-func TestLoadRejectsInconsistent(t *testing.T) {
-	dir := t.TempDir()
-	cases := []struct {
-		name    string
-		version int
-		kdf     string
-	}{
-		{"v2-scrypt", fileVersion, kdfScrypt},
-		{"v1-argon", fileVersionLegacyScrypt, kdfArgon2id},
-	}
-	pass := []byte("pw")
-	defer ZeroPassphrase(pass)
-	for _, tc := range cases {
-		ew := EncryptedWalletFile{
-			Version:       tc.version,
-			Address:       "TPlaceholder",
-			KDF:           tc.kdf,
-			SaltHex:       hex.EncodeToString(make([]byte, 16)),
-			N:             scryptN,
-			R:             scryptR,
-			P:             scryptP,
-			Argon2Time:    argon2Time,
-			Argon2Memory:  argon2Memory,
-			Argon2Threads: argon2Threads,
-			Argon2KeyLen:  argon2KeyLen,
-			Cipher:        cipherAES256GCM,
-			NonceHex:      hex.EncodeToString(make([]byte, 12)),
-			DataHex:       hex.EncodeToString(make([]byte, 48)),
+		ew := readWalletJSON(dir, "w")
+		Expect(ew.Version).To(Equal(fileVersionLegacyScrypt))
+		Expect(ew.KDF).To(Equal(kdfScrypt))
+
+		backupPath := filepath.Join(dir, safeName("w")+legacyBackupSuffix)
+		_, err = os.Stat(backupPath)
+		Expect(os.IsNotExist(err)).To(BeTrue())
+		Expect(warn.Len()).To(Equal(0))
+	})
+
+	It("rejects files with inconsistent version and KDF combinations", func() {
+		dir := GinkgoT().TempDir()
+		cases := []struct {
+			name    string
+			version int
+			kdf     string
+		}{
+			{"v2-scrypt", fileVersion, kdfScrypt},
+			{"v1-argon", fileVersionLegacyScrypt, kdfArgon2id},
 		}
-		body, err := json.MarshalIndent(&ew, "", "  ")
-		if err != nil {
-			t.Fatal(err)
+
+		pass := []byte("pw")
+		defer ZeroPassphrase(pass)
+
+		for _, tc := range cases {
+			ew := EncryptedWalletFile{
+				Version:       tc.version,
+				Address:       "TPlaceholder",
+				KDF:           tc.kdf,
+				SaltHex:       hex.EncodeToString(make([]byte, 16)),
+				N:             scryptN,
+				R:             scryptR,
+				P:             scryptP,
+				Argon2Time:    argon2Time,
+				Argon2Memory:  argon2Memory,
+				Argon2Threads: argon2Threads,
+				Argon2KeyLen:  argon2KeyLen,
+				Cipher:        cipherAES256GCM,
+				NonceHex:      hex.EncodeToString(make([]byte, 12)),
+				DataHex:       hex.EncodeToString(make([]byte, 48)),
+			}
+
+			body, err := json.MarshalIndent(&ew, "", "  ")
+			Expect(err).NotTo(HaveOccurred())
+
+			path := filepath.Join(dir, safeName(tc.name)+".json")
+			Expect(os.WriteFile(path, body, 0o600)).To(Succeed())
+
+			_, err = LoadPrivateKey(dir, tc.name, pass)
+			Expect(err).To(HaveOccurred(), tc.name)
 		}
-		path := filepath.Join(dir, safeName(tc.name)+".json")
-		if err := os.WriteFile(path, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		_, err = LoadPrivateKey(dir, tc.name, pass)
-		if err == nil {
-			t.Fatalf("%s: expected error, got nil", tc.name)
-		}
-	}
-}
+	})
 
-func TestStoreLoadPassphraseNFDvsNFC(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	nfd := []byte("cafe\u0301-pass-1")
-	defer ZeroPassphrase(nfd)
+	It("loads wallet across NFC and NFD equivalent passphrases", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
 
-	addr, err := Store(dir, "u1", hexKey, nfd, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		nfd := []byte("cafe\u0301-pass-1")
+		defer ZeroPassphrase(nfd)
 
-	nfc := []byte("caf\u00e9-pass-1")
-	defer ZeroPassphrase(nfc)
-	pk, err := LoadPrivateKey(dir, "u1", nfc)
-	if err != nil {
-		t.Fatalf("NFC must unlock NFD-encrypted wallet: %v", err)
-	}
-	defer pk.Wipe()
-	if pk.Address != addr {
-		t.Fatalf("address mismatch: want %s, got %s", addr, pk.Address)
-	}
-}
+		addr, err := Store(dir, "u1", hexKey, nfd, nil)
+		Expect(err).NotTo(HaveOccurred())
 
-func TestStoreLoadPassphraseLigatureCompat(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	withLig := []byte("\uFB01le-secret")
-	defer ZeroPassphrase(withLig)
+		nfc := []byte("caf\u00e9-pass-1")
+		defer ZeroPassphrase(nfc)
 
-	if _, err := Store(dir, "u2", hexKey, withLig, nil); err != nil {
-		t.Fatal(err)
-	}
+		pk, err := LoadPrivateKey(dir, "u1", nfc)
+		Expect(err).NotTo(HaveOccurred())
+		defer pk.Wipe()
+		Expect(pk.Address).To(Equal(addr))
+	})
 
-	ascii := []byte("file-secret")
-	defer ZeroPassphrase(ascii)
-	pk, err := LoadPrivateKey(dir, "u2", ascii)
-	if err != nil {
-		t.Fatalf("ASCII must unlock ligature-encrypted wallet (NFKC compat): %v", err)
-	}
-	defer pk.Wipe()
-}
+	It("loads wallet across ligature compatibility forms", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
 
-func TestStoreLoadPassphraseWrongNonASCII(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	good := []byte("\u043f\u0430\u0440\u043e\u043b\u044c")
-	defer ZeroPassphrase(good)
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		withLig := []byte("\uFB01le-secret")
+		defer ZeroPassphrase(withLig)
 
-	if _, err := Store(dir, "u3", hexKey, good, nil); err != nil {
-		t.Fatal(err)
-	}
+		_, err = Store(dir, "u2", hexKey, withLig, nil)
+		Expect(err).NotTo(HaveOccurred())
 
-	bad := []byte("\u043f\u0430\u0440\u043e\u043b\u044c1")
-	defer ZeroPassphrase(bad)
-	if _, err := LoadPrivateKey(dir, "u3", bad); err == nil {
-		t.Fatal("expected decryption failure for distinct non-ASCII passphrase")
-	}
-}
+		ascii := []byte("file-secret")
+		defer ZeroPassphrase(ascii)
+		pk, err := LoadPrivateKey(dir, "u2", ascii)
+		Expect(err).NotTo(HaveOccurred())
+		defer pk.Wipe()
+	})
 
-func TestEnsureNetworkRecordedWorksOnV1AndV2(t *testing.T) {
-	dir := t.TempDir()
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
-	pass := []byte("pw")
-	defer ZeroPassphrase(pass)
+	It("rejects wrong non-ASCII passphrase", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
 
-	writeV1ScryptWallet(t, dir, "v1", hexKey, pass, nil)
-	if err := EnsureNetworkRecorded(dir, "v1", "mainnet"); err != nil {
-		t.Fatalf("v1 ensure: %v", err)
-	}
-	nets, err := ReadWalletNetworks(dir, "v1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(nets) != 1 || nets[0] != "mainnet" {
-		t.Fatalf("v1 networks: %v", nets)
-	}
-	v1file := readWalletJSON(t, dir, "v1")
-	if v1file.Version != fileVersionLegacyScrypt || v1file.KDF != kdfScrypt {
-		t.Fatalf("v1 should stay v1 after metadata update: %+v", v1file)
-	}
-	if _, err := Store(dir, "v2", hexKey, pass, nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := EnsureNetworkRecorded(dir, "v2", "shasta"); err != nil {
-		t.Fatalf("v2 ensure: %v", err)
-	}
-	v2file := readWalletJSON(t, dir, "v2")
-	if v2file.Version != fileVersion || v2file.KDF != kdfArgon2id {
-		t.Fatalf("v2 envelope changed: %+v", v2file)
-	}
-}
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		good := []byte("пароль")
+		defer ZeroPassphrase(good)
+
+		_, err = Store(dir, "u3", hexKey, good, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		bad := []byte("пароль1")
+		defer ZeroPassphrase(bad)
+		_, err = LoadPrivateKey(dir, "u3", bad)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("updates networks on both v1 and v2 wallets without rewriting version semantics", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
+
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		pass := []byte("pw")
+		defer ZeroPassphrase(pass)
+
+		writeV1ScryptWallet(dir, "v1", hexKey, pass, nil)
+		Expect(EnsureNetworkRecorded(dir, "v1", "mainnet")).To(Succeed())
+
+		nets, err := ReadWalletNetworks(dir, "v1")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nets).To(Equal([]string{"mainnet"}))
+
+		v1file := readWalletJSON(dir, "v1")
+		Expect(v1file.Version).To(Equal(fileVersionLegacyScrypt))
+		Expect(v1file.KDF).To(Equal(kdfScrypt))
+
+		_, err = Store(dir, "v2", hexKey, pass, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(EnsureNetworkRecorded(dir, "v2", "shasta")).To(Succeed())
+
+		v2file := readWalletJSON(dir, "v2")
+		Expect(v2file.Version).To(Equal(fileVersion))
+		Expect(v2file.KDF).To(Equal(kdfArgon2id))
+	})
+})
