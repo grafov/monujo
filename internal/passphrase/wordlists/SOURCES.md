@@ -55,19 +55,38 @@ typeable on any QWERTY/AZERTY keyboard without an Esperanto input method.
 - Produced by the same generator as `esperanto.txt`.
 - License: CC BY-SA 4.0 (inherits from the sources above).
 
-## russian.txt (4096 words)
+## russian.txt (15213 words)
 
-Top 4096 distinct Russian words by frequency from the Leeds Russian
-Internet Corpus (via `hingston/russian`), lengths 3–7 characters (runes),
-lowercase only, Cyrillic letters only (U+0430–U+044F plus U+0451 `ё` and
-U+0439 `й`). NFKC-idempotent. Note that the list includes some proper
-names that appear frequently in the corpus (e.g. common first names);
-these are acceptable for passphrase generation.
+Frequency lemmas from the Russian National Corpus (RNC) frequency list
+by O. N. Lyashevskaya & S. A. Sharov:
 
-- Upstream: https://github.com/hingston/russian (file:
-  `10000-russian-words.txt`)
-- License: MIT.
-- Size chosen as 4096 (= 2^12, exactly 12 bits of entropy per word).
+1. **Primary source** — О. Н. Ляшевская, С. А. Шаров, «Частотный
+   словарь современного русского языка (на материалах Национального
+   корпуса русского языка)», М.: Азбуковник, 2009. Online:
+   [dict.ruslang.ru/freq.php](http://dict.ruslang.ru/freq.php?act=show&dic=freq_freq&title=%D7%E0%F1%F2%EE%F2%ED%FB%E9%20%F1%EF%E8%F1%EE%EA%20%EB%E5%EC%EC)
+   (URL parameters encoded in cp1251).
+2. **Practical parsing source** — Wiktionary appendix
+   [Appendix:Frequency dictionary of the modern Russian language
+   (the Russian National
+   Corpus)](https://en.wiktionary.org/wiki/Appendix:Frequency_dictionary_of_the_modern_Russian_language_(the_Russian_National_Corpus))
+   (CC BY-SA 4.0) — 20 004 ranked lemmas, stored verbatim in
+   `upstream/russian_rnc.txt`.
+
+Processing (see `gen/russian/main.go`): `strings.ToLower` → Unicode NFC
+→ keep only words matching `^[а-яёй]{3,10}$` (runes; U+0430–U+044F plus
+U+0451 `ё`, note that U+0439 `й` already lies in `а-я`) →
+NFKC-idempotent per [keystore.NormalizePassphrase](../../keystore/passphrase.go)
+→ dedupe → sort. Upstream orthography is preserved as-is, including
+ё-less spellings such as `бобер`, `еще`, `елка` — NFKC treats `ё/е`
+and `й/и` as distinct, so we do not heuristically restore `ё`.
+Effective size **15 213** words (~**13.893** bits per word,
+`log2(15213)`).
+
+- License: CC BY-SA 4.0 (inherits from the Wiktionary appendix; the
+  RNC publication is freely available at dict.ruslang.ru).
+- Note: the list includes some proper names that appear frequently in
+  the corpus (e.g. common first names and country names); these are
+  acceptable for passphrase generation.
 
 ## Regeneration
 
@@ -77,6 +96,12 @@ these are acceptable for passphrase generation.
   `esperanto.txt`, then overwrites `esperanto.txt` and `esperanto_x.txt`.
   After changing upstream inputs, always run `make test` to re-validate
   embed constraints.
+
+- **Russian** (RNC frequency list): from the repository root run  
+  `go run ./internal/passphrase/wordlists/gen/russian`  
+  The tool reads `upstream/russian_rnc.txt` and overwrites
+  `russian.txt`. After changing the upstream input, always run
+  `make test` to re-validate embed constraints.
 
 - Other lists: follow the steps recorded in the repository history if you
   need to bump sizes. Upstream files may change — always re-run the

@@ -188,7 +188,7 @@ var _ = Describe("dictionary metadata", func() {
 			DictEnglishShort: 1296,
 			DictEsperantoX:   14851,
 			DictEsperanto:    14851,
-			DictRussian:      4096,
+			DictRussian:      15213,
 		}
 
 		for id, want := range cases {
@@ -215,7 +215,7 @@ var _ = Describe("dictionary metadata", func() {
 		d, err := loadDict(DictRussian)
 		Expect(err).NotTo(HaveOccurred())
 
-		pattern := regexp.MustCompile(`^[а-яёй]{3,7}$`)
+		pattern := regexp.MustCompile(`^[а-яёй]{3,10}$`)
 		for _, w := range d.words {
 			Expect(pattern.MatchString(w)).To(BeTrue(), w)
 		}
