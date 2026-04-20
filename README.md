@@ -52,7 +52,7 @@ List wallets (names, addresses, and recorded networks):
 # JSON with optional key field: --output json --export-private-key
 ```
 
-2. **Import** a 64-hex-character secp256k1 private key into an encrypted file (scrypt + AES-GCM):
+2. **Import** a 64-hex-character secp256k1 private key into an encrypted file (Argon2id + AES-256-GCM; legacy scrypt files from pre-v2 releases are auto-migrated on first unlock):
 
 ```bash
 ./build/monujo hot import --name myhot --key-hex <64_HEX_CHARS>

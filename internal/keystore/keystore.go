@@ -1,4 +1,15 @@
-// Package keystore stores Tron secp256k1 private keys encrypted at rest (scrypt + AES-GCM).
+// Package keystore stores Tron secp256k1 private keys encrypted at rest.
+//
+// The current v2 format uses Argon2id (RFC 9106) as the password-based key
+// derivation function and AES-256-GCM for encryption. Older v1 files produced
+// by earlier monujo releases used scrypt; they are still readable and are
+// transparently re-encrypted to v2 on first successful unlock (see
+// [LoadPrivateKey]).
+//
+// Parameter choices for v2 follow the OWASP Password Storage Cheat Sheet
+// "server" profile; salt length satisfies NIST SP 800-132 §5.1. monujo is not
+// a FIPS 140-3 / ISO/IEC 19790 certified cryptographic module: Argon2id is
+// not on the FIPS-approved list. See docs/06-keystore.md for details.
 package keystore
 
 import (
@@ -15,35 +26,79 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
+	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/scrypt"
 )
 
 const (
-	fileVersion = 1
-	keyBytes    = 32
-	scryptN     = 32768
-	scryptR     = 8
-	scryptP     = 1
-	saltLen     = 32
-	nonceLen    = 12
+	fileVersion             = 2
+	fileVersionLegacyScrypt = 1
+	keyBytes                = 32
+
+	// Argon2id parameters for v2. These correspond to the OWASP
+	// Password Storage Cheat Sheet "server" profile: t=3, m=64 MiB,
+	// p=4, keyLen=32. A desktop unlock finishes in ~150-400 ms on
+	// typical hardware.
+	argon2Time    uint32 = 3
+	argon2Memory  uint32 = 64 * 1024
+	argon2Threads uint8  = 4
+	argon2KeyLen  uint32 = 32
+
+	// saltLen is 16 bytes (128 bits) which satisfies NIST SP 800-132
+	// §5.1 and matches OWASP guidance for Argon2id. v1 files used 32
+	// bytes; we keep reading them via SaltHex and only apply 16 when
+	// writing v2.
+	saltLen  = 16
+	nonceLen = 12
+
+	kdfScrypt   = "scrypt"
+	kdfArgon2id = "argon2id"
+
+	cipherAES256GCM = "aes-256-gcm"
+
+	// legacyBackupSuffix is appended to the safe name when we back up
+	// a v1 scrypt file during auto-migration. If a file with this
+	// name already exists, a unix-ms timestamp is appended on top.
+	legacyBackupSuffix = ".scrypt.bak"
 )
 
-// EncryptedWalletFile is the on-disk JSON format for monujo keystore v1.
+// EncryptedWalletFile is the on-disk JSON format for monujo keystore
+// files. The same struct represents both v1 (scrypt, legacy) and v2
+// (argon2id, current) files; which set of KDF fields is populated
+// depends on [EncryptedWalletFile.KDF]:
+//
+//   - KDF == "scrypt"   -> N, R, P are set; argon2_* are zero.
+//   - KDF == "argon2id" -> Argon2Time, Argon2Memory, Argon2Threads,
+//     Argon2KeyLen are set; N, R, P are zero.
+//
+// All unrelated fields use omitempty so that round-tripping a v1 file
+// during metadata updates (e.g. [EnsureNetworkRecorded]) does not
+// introduce spurious zero-valued argon2_* fields.
 type EncryptedWalletFile struct {
 	Version  int      `json:"version"`
 	Address  string   `json:"address"`
 	Networks []string `json:"networks,omitempty"`
 	KDF      string   `json:"kdf"`
 	SaltHex  string   `json:"salt_hex"`
-	N        int      `json:"n"`
-	R        int      `json:"r"`
-	P        int      `json:"p"`
-	Cipher   string   `json:"cipher"`
-	NonceHex string   `json:"nonce_hex"`
-	DataHex  string   `json:"data_hex"`
+
+	// Legacy scrypt parameters (kdf == "scrypt").
+	N int `json:"n,omitempty"`
+	R int `json:"r,omitempty"`
+	P int `json:"p,omitempty"`
+
+	// Argon2id parameters (kdf == "argon2id").
+	Argon2Time    uint32 `json:"argon2_time,omitempty"`
+	Argon2Memory  uint32 `json:"argon2_memory,omitempty"`
+	Argon2Threads uint8  `json:"argon2_threads,omitempty"`
+	Argon2KeyLen  uint32 `json:"argon2_key_len,omitempty"`
+
+	Cipher   string `json:"cipher"`
+	NonceHex string `json:"nonce_hex"`
+	DataHex  string `json:"data_hex"`
 }
 
 // WalletListItem is public metadata for one keystore file (no secret material).
@@ -139,7 +194,7 @@ func ListWallets(keystoreDir string) ([]WalletListItem, error) {
 		if err := json.Unmarshal(body, &ew); err != nil {
 			continue
 		}
-		if ew.Version != fileVersion || strings.TrimSpace(ew.Address) == "" {
+		if !isSupportedVersion(ew.Version) || strings.TrimSpace(ew.Address) == "" {
 			continue
 		}
 		stem := name[:len(name)-len(".json")]
@@ -173,6 +228,7 @@ func readWalletFile(keystoreDir, name string) ([]byte, error) {
 }
 
 // ReadWalletNetworks returns normalized network ids from the wallet JSON without decrypting the key.
+// Both v1 (legacy scrypt) and v2 (argon2id) files are accepted.
 func ReadWalletNetworks(keystoreDir, name string) ([]string, error) {
 	body, err := readWalletFile(keystoreDir, name)
 	if err != nil {
@@ -182,13 +238,16 @@ func ReadWalletNetworks(keystoreDir, name string) ([]string, error) {
 	if err := json.Unmarshal(body, &ew); err != nil {
 		return nil, err
 	}
-	if ew.Version != fileVersion {
+	if !isSupportedVersion(ew.Version) {
 		return nil, fmt.Errorf("unsupported keystore version %d", ew.Version)
 	}
 	return normalizeNetworkList(ew.Networks), nil
 }
 
-// EnsureNetworkRecorded appends network to the wallet file metadata if missing (no re-encryption).
+// EnsureNetworkRecorded appends network to the wallet file metadata if missing
+// (no re-encryption). Works on both v1 and v2 files; metadata updates do not
+// trigger v1->v2 migration by themselves — only a successful [LoadPrivateKey]
+// does, because migration requires the plaintext key.
 func EnsureNetworkRecorded(keystoreDir, name, network string) error {
 	net := NormalizeNetworkID(network)
 	if net == "" {
@@ -202,7 +261,7 @@ func EnsureNetworkRecorded(keystoreDir, name, network string) error {
 	if err := json.Unmarshal(body, &ew); err != nil {
 		return err
 	}
-	if ew.Version != fileVersion {
+	if !isSupportedVersion(ew.Version) {
 		return fmt.Errorf("unsupported keystore version %d", ew.Version)
 	}
 	for _, x := range normalizeNetworkList(ew.Networks) {
@@ -217,6 +276,11 @@ func EnsureNetworkRecorded(keystoreDir, name, network string) error {
 	}
 	path := filepath.Join(keystoreDir, safeName(name)+".json")
 	return writeFileAtomic(path, out, 0o600)
+}
+
+// isSupportedVersion reports whether the keystore file version can be read by this build.
+func isSupportedVersion(v int) bool {
+	return v == fileVersion || v == fileVersionLegacyScrypt
 }
 
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
@@ -281,46 +345,12 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 		return "", err
 	}
 	addr := address.PubkeyToAddress(priv.PublicKey).String()
-
-	salt := make([]byte, saltLen)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		return "", err
-	}
-	dk, err := scrypt.Key(passphrase, salt, scryptN, scryptR, scryptP, 32)
-	if err != nil {
-		return "", err
-	}
-	defer zeroBytes(dk)
-
-	block, err := aes.NewCipher(dk)
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, nonceLen)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
 	plain := crypto.FromECDSA(priv)
-	out := gcm.Seal(nil, nonce, plain, nil)
-	zeroBytes(plain)
+	defer zeroBytes(plain)
 
-	nets := normalizeNetworkList(networks)
-	ew := EncryptedWalletFile{
-		Version:  fileVersion,
-		Address:  addr,
-		Networks: nets,
-		KDF:      "scrypt",
-		SaltHex:  hex.EncodeToString(salt),
-		N:        scryptN,
-		R:        scryptR,
-		P:        scryptP,
-		Cipher:   "aes-256-gcm",
-		NonceHex: hex.EncodeToString(nonce),
-		DataHex:  hex.EncodeToString(out),
+	ew, err := buildV2Envelope(addr, plain, passphrase, networks)
+	if err != nil {
+		return "", err
 	}
 	body, err := json.MarshalIndent(ew, "", "  ")
 	if err != nil {
@@ -333,7 +363,65 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 	return addr, nil
 }
 
-// LoadPrivateKey decrypts the named wallet and returns an ECDSA private key (caller must wipe when done).
+// buildV2Envelope encrypts plain with argon2id+AES-256-GCM and returns the
+// v2 on-disk envelope. plain is not zeroed by this function; callers own the
+// buffer's lifetime.
+func buildV2Envelope(addr string, plain, passphrase []byte, networks []string) (EncryptedWalletFile, error) {
+	var zero EncryptedWalletFile
+	if len(plain) != keyBytes {
+		return zero, fmt.Errorf("invalid plaintext key length %d", len(plain))
+	}
+	salt := make([]byte, saltLen)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return zero, err
+	}
+	dk := argon2.IDKey(passphrase, salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	defer zeroBytes(dk)
+
+	block, err := aes.NewCipher(dk)
+	if err != nil {
+		return zero, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return zero, err
+	}
+	nonce := make([]byte, nonceLen)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return zero, err
+	}
+	ciphertext := gcm.Seal(nil, nonce, plain, nil)
+
+	return EncryptedWalletFile{
+		Version:       fileVersion,
+		Address:       addr,
+		Networks:      normalizeNetworkList(networks),
+		KDF:           kdfArgon2id,
+		SaltHex:       hex.EncodeToString(salt),
+		Argon2Time:    argon2Time,
+		Argon2Memory:  argon2Memory,
+		Argon2Threads: argon2Threads,
+		Argon2KeyLen:  argon2KeyLen,
+		Cipher:        cipherAES256GCM,
+		NonceHex:      hex.EncodeToString(nonce),
+		DataHex:       hex.EncodeToString(ciphertext),
+	}, nil
+}
+
+// migrationWarnWriter is the stream used for one-off human notices when a
+// v1 scrypt file is silently migrated to v2 argon2id on the fly. Tests
+// redirect it to a buffer to avoid polluting test output.
+var migrationWarnWriter io.Writer = os.Stderr
+
+// LoadPrivateKey decrypts the named wallet and returns an ECDSA private key
+// (caller must wipe when done).
+//
+// The function reads both v1 (scrypt, legacy) and v2 (argon2id) files.
+// After a successful v1 decryption it opportunistically re-encrypts the file
+// in v2 format and writes the original aside as <name>.scrypt.bak (with a
+// unix-ms suffix on collision). A migration failure is logged to stderr but
+// does not fail the current operation: the caller receives its PrivKey and a
+// later load will attempt the migration again.
 func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, error) {
 	body, err := readWalletFile(keystoreDir, name)
 	if err != nil {
@@ -343,9 +431,13 @@ func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, erro
 	if err := json.Unmarshal(body, &ew); err != nil {
 		return nil, err
 	}
-	if ew.Version != fileVersion {
+	if !isSupportedVersion(ew.Version) {
 		return nil, fmt.Errorf("unsupported keystore version %d", ew.Version)
 	}
+	if err := validateVersionKDF(ew.Version, ew.KDF); err != nil {
+		return nil, err
+	}
+
 	salt, err := hex.DecodeString(ew.SaltHex)
 	if err != nil {
 		return nil, err
@@ -358,32 +450,17 @@ func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, erro
 	if err != nil {
 		return nil, err
 	}
-	dk, err := scrypt.Key(passphrase, salt, ew.N, ew.R, ew.P, 32)
+	if ew.Cipher != cipherAES256GCM {
+		return nil, fmt.Errorf("unsupported cipher %q", ew.Cipher)
+	}
+
+	plain, err := decryptWalletData(ew, salt, nonce, data, passphrase)
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(dk)
-	if err != nil {
-		zeroBytes(dk)
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		zeroBytes(dk)
-		return nil, err
-	}
-	plain, err := gcm.Open(nil, nonce, data, nil)
-	if err != nil {
-		zeroBytes(dk)
-		return nil, errors.New("decryption failed (wrong passphrase or corrupt file)")
-	}
-	zeroBytes(dk)
-	if len(plain) != keyBytes {
-		zeroBytes(plain)
-		return nil, fmt.Errorf("invalid decrypted key length")
-	}
+	defer zeroBytes(plain)
+
 	priv, err := crypto.ToECDSA(plain)
-	zeroBytes(plain)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +469,121 @@ func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, erro
 		zeroPriv(priv)
 		return nil, fmt.Errorf("address mismatch in keystore")
 	}
+
+	if ew.Version == fileVersionLegacyScrypt {
+		if mErr := migrateV1ToV2(keystoreDir, name, ew, plain, passphrase); mErr != nil {
+			fmt.Fprintf(migrationWarnWriter,
+				"warning: failed to migrate wallet %q to argon2id: %v\n", name, mErr)
+		}
+	}
+
 	return &PrivKey{Key: priv, Address: ew.Address}, nil
+}
+
+// validateVersionKDF rejects cross-version KDF combinations. v1 files must
+// use scrypt; v2 files must use argon2id. Any other combination is almost
+// certainly a malformed or hand-edited file.
+func validateVersionKDF(version int, kdf string) error {
+	switch version {
+	case fileVersionLegacyScrypt:
+		if kdf != kdfScrypt {
+			return fmt.Errorf("keystore v1 requires kdf %q, got %q", kdfScrypt, kdf)
+		}
+	case fileVersion:
+		if kdf != kdfArgon2id {
+			return fmt.Errorf("keystore v2 requires kdf %q, got %q", kdfArgon2id, kdf)
+		}
+	default:
+		return fmt.Errorf("unsupported keystore version %d", version)
+	}
+	return nil
+}
+
+// decryptWalletData runs the correct KDF (scrypt for v1, argon2id for v2) and
+// performs AES-256-GCM open. The returned plaintext must be zeroed by the caller.
+func decryptWalletData(ew EncryptedWalletFile, salt, nonce, data, passphrase []byte) ([]byte, error) {
+	var dk []byte
+	switch ew.KDF {
+	case kdfScrypt:
+		var err error
+		dk, err = scrypt.Key(passphrase, salt, ew.N, ew.R, ew.P, 32)
+		if err != nil {
+			return nil, err
+		}
+	case kdfArgon2id:
+		if ew.Argon2KeyLen == 0 || ew.Argon2Time == 0 || ew.Argon2Memory == 0 || ew.Argon2Threads == 0 {
+			return nil, fmt.Errorf("keystore v2: missing argon2id parameters")
+		}
+		dk = argon2.IDKey(passphrase, salt, ew.Argon2Time, ew.Argon2Memory, ew.Argon2Threads, ew.Argon2KeyLen)
+	default:
+		return nil, fmt.Errorf("unsupported kdf %q", ew.KDF)
+	}
+	defer zeroBytes(dk)
+
+	block, err := aes.NewCipher(dk)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	plain, err := gcm.Open(nil, nonce, data, nil)
+	if err != nil {
+		return nil, errors.New("decryption failed (wrong passphrase or corrupt file)")
+	}
+	if len(plain) != keyBytes {
+		zeroBytes(plain)
+		return nil, fmt.Errorf("invalid decrypted key length")
+	}
+	return plain, nil
+}
+
+// migrateV1ToV2 rewrites a successfully-decrypted v1 scrypt file as v2 argon2id
+// in place. It is invoked only after the plaintext key has been recovered and
+// the on-disk address verified, so failure here never loses key material.
+//
+// Steps, in order:
+//  1. Rename the original file to <safeName>.scrypt.bak (suffixed with a
+//     unix-ms timestamp if a backup already exists).
+//  2. Encrypt the plaintext with argon2id+AES-256-GCM and write a v2 JSON
+//     atomically (temp file + rename) under the original path.
+//
+// On success an informational line is written to [migrationWarnWriter].
+func migrateV1ToV2(keystoreDir, name string, old EncryptedWalletFile, plain, passphrase []byte) error {
+	stem := safeName(name)
+	origPath := filepath.Join(keystoreDir, stem+".json")
+	backupPath := filepath.Join(keystoreDir, stem+legacyBackupSuffix)
+	if _, err := os.Stat(backupPath); err == nil {
+		backupPath = fmt.Sprintf("%s.%d", backupPath, time.Now().UnixMilli())
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat backup path: %w", err)
+	}
+
+	ew, err := buildV2Envelope(old.Address, plain, passphrase, old.Networks)
+	if err != nil {
+		return fmt.Errorf("build v2 envelope: %w", err)
+	}
+	body, err := json.MarshalIndent(&ew, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal v2 envelope: %w", err)
+	}
+
+	if err := os.Rename(origPath, backupPath); err != nil {
+		return fmt.Errorf("backup v1 file: %w", err)
+	}
+	if err := writeFileAtomic(origPath, body, 0o600); err != nil {
+		// Best-effort: try to restore original from backup so we don't
+		// leave the wallet missing. If restore fails too, the user
+		// still has the .bak file we just wrote.
+		_ = os.Rename(backupPath, origPath)
+		return fmt.Errorf("write v2 file: %w", err)
+	}
+
+	fmt.Fprintf(migrationWarnWriter,
+		"note: migrated wallet %q from scrypt to argon2id; legacy backup saved as %s\n",
+		name, filepath.Base(backupPath))
+	return nil
 }
 
 // PrivKey wraps a decrypted key with expected Tron address.

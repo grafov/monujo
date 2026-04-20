@@ -37,7 +37,7 @@ docker-build: # just set token into GITHUB_TOKEN environment variable
 test:
 	go tool ginkgo ./...
 
-																																																					.PHONY: test-race
+.PHONY: test-race
 test-race:
 	go tool ginkgo -r --race --randomize-all --randomize-suites ./internal/tron
 
