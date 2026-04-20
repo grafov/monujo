@@ -130,6 +130,40 @@ var _ = Describe("keystore basic operations", func() {
 		defer pk.Wipe()
 	})
 
+	It("reports wallet existence", func() {
+		dir := GinkgoT().TempDir()
+
+		missing := filepath.Join(dir, "does-not-exist")
+		got, err := WalletExists(missing, "anything")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeFalse())
+
+		got, err = WalletExists(dir, "absent")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeFalse())
+
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		pass := []byte("test-passphrase-32-chars-long!!")
+		defer ZeroPassphrase(pass)
+
+		_, err = Store(dir, "present", hexKey, pass, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		got, err = WalletExists(dir, "present")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeTrue())
+
+		// Name round-trips through safeName: "a b" is stored as "a_b.json".
+		_, err = Store(dir, "a b", hexKey, pass, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		got, err = WalletExists(dir, "a b")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeTrue())
+	})
+
 	It("loads legacy file without networks and can append network metadata", func() {
 		dir := GinkgoT().TempDir()
 		priv, err := crypto.GenerateKey()

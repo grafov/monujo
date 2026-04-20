@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/grafov/monujo/internal/config"
@@ -43,6 +44,45 @@ func confirmWalletNetworkForOperation(cfg *config.Config, walletName string, for
 		return fmt.Errorf("network mismatch: use --force to proceed without a terminal, or run interactively to confirm")
 	}
 	fmt.Fprintf(os.Stderr, "Continue? [y/N]: ")
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return err
+	}
+	line = strings.TrimSpace(strings.ToLower(line))
+	if line == "y" || line == "yes" {
+		return nil
+	}
+	return fmt.Errorf("aborted")
+}
+
+// confirmHotWalletOverwrite enforces the overwrite policy for `hot create` and
+// `hot import`:
+//
+//   - If no wallet file exists for walletName, returns nil.
+//   - If the wallet file exists and overwrite is false, returns an error
+//     explaining how to force replacement.
+//   - If the wallet file exists and overwrite is true: on a TTY the user is
+//     prompted for interactive [y/N] confirmation; on a non-TTY stdin the
+//     operation proceeds without additional confirmation (the explicit
+//     --overwrite flag is treated as the confirmation in scripts).
+func confirmHotWalletOverwrite(cfg *config.Config, walletName string, overwrite bool) error {
+	exists, err := keystore.WalletExists(cfg.KeystoreDir, walletName)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	path := filepath.Join(cfg.KeystoreDir, walletName+".json")
+	if !overwrite {
+		return fmt.Errorf("wallet %q already exists at %s; use --overwrite to replace (DANGEROUS, irreversible)", walletName, path)
+	}
+	if !stdinIsTerminal() {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "DANGER: wallet %q already exists at %s\n", walletName, path)
+	fmt.Fprintf(os.Stderr, "Overwriting will permanently destroy the previous private key; anything encrypted under it becomes unrecoverable.\n")
+	fmt.Fprintf(os.Stderr, "Overwrite? [y/N]: ")
 	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil {
 		return err

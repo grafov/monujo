@@ -210,6 +210,29 @@ func ListWallets(keystoreDir string) ([]WalletListItem, error) {
 	return out, nil
 }
 
+// WalletExists reports whether a wallet file with the given logical name exists
+// in keystoreDir. A missing keystore directory is not an error and returns
+// (false, nil). The check is performed through os.OpenRoot so it cannot escape
+// keystoreDir even if safeName is ever weakened.
+func WalletExists(keystoreDir, name string) (bool, error) {
+	root, err := os.OpenRoot(keystoreDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	defer func() { _ = root.Close() }()
+	_, err = root.Stat(safeName(name) + ".json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // readWalletFile reads a wallet file by logical name from keystoreDir using os.Root,
 // so that the resulting open is constrained to keystoreDir and cannot escape via
 // symlinks or path traversal even if safeName is ever weakened.

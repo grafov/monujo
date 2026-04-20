@@ -57,6 +57,7 @@ func (errPassMismatchType) Error() string { return "passphrases do not match" }
 func newHotImportCmd() *cobra.Command {
 	var name string
 	var keyHex string
+	var overwrite bool
 	var gen generateFlags
 	cmd := &cobra.Command{
 		Use:   "import",
@@ -73,6 +74,9 @@ func newHotImportCmd() *cobra.Command {
 			if key == "" {
 				return errNeedKeyOrEnv
 			}
+			if err := confirmHotWalletOverwrite(cfg, name, overwrite); err != nil {
+				return err
+			}
 			pass, err := obtainNewKeystorePassphrase(cmd.ErrOrStderr(), gen, "New keystore passphrase: ")
 			if err != nil {
 				return err
@@ -84,6 +88,8 @@ func newHotImportCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Wallet name (file name in keystore)")
 	cmd.Flags().StringVar(&keyHex, "key-hex", "", "64-character hex private key (optional if MONUJO_IMPORT_KEY is set)")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false,
+		"DANGEROUS: replace existing wallet file; the previous private key is permanently lost")
 	registerGenerateFlags(cmd, &gen)
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
@@ -100,6 +106,7 @@ func (errNeedKeyType) Error() string {
 func newHotCreateCmd() *cobra.Command {
 	var name string
 	var exportPriv bool
+	var overwrite bool
 	var gen generateFlags
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -107,6 +114,9 @@ func newHotCreateCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
+				return err
+			}
+			if err := confirmHotWalletOverwrite(cfg, name, overwrite); err != nil {
 				return err
 			}
 			pass, err := obtainNewKeystorePassphrase(cmd.ErrOrStderr(), gen, "New keystore passphrase: ")
@@ -121,6 +131,8 @@ func newHotCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Wallet name (file name in keystore)")
 	cmd.Flags().BoolVar(&exportPriv, "export-private-key", false, "Print raw hex private key once (unsafe)")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false,
+		"DANGEROUS: replace existing wallet file; the previous private key is permanently lost")
 	registerGenerateFlags(cmd, &gen)
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
