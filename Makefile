@@ -39,11 +39,11 @@ test:
 
 .PHONY: test-race
 test-race:
-	go tool ginkgo -r --race --randomize-all --randomize-suites ./internal/tron
+	go tool ginkgo -r --race --randomize-all --randomize-suites ./...
 
 .PHONY: test-coverage
 test-coverage:
-	go tool ginkgo -r --cover --coverpkg=./internal/tron ./internal/tron
+	go tool ginkgo -r --cover ./...
 
 .PHONY: test-integration
 test-integration:

@@ -50,7 +50,10 @@ List wallets (names, addresses, and recorded networks):
 ./build/monujo hot create --name myhot [--network shasta]
 # optional: --export-private-key (prints raw hex once; unsafe)
 # JSON with optional key field: --output json --export-private-key
+# optional: --generate-passphrase (see "Passphrase generator" below)
 ```
+
+A built-in passphrase generator is available as the standalone `monujo tool genpass` command and as `--generate-passphrase` on `hot create` / `hot import`. Dictionaries: `english` (EFF Long, default), `english-short`, `esperanto-x` (ASCII), `esperanto` (with diacritics), `russian` (Cyrillic). See [docs/06-keystore.md](docs/06-keystore.md) §"Генератор парольных фраз" for details, including the warnings printed for non-ASCII dictionaries and the exact NFKC semantics.
 
 2. **Import** a 64-hex-character secp256k1 private key into an encrypted file (Argon2id + AES-256-GCM; legacy scrypt files from pre-v2 releases are auto-migrated on first unlock):
 
