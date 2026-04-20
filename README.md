@@ -1,4 +1,20 @@
-# monujo
+# Monujo
+
+_In Open Source We Trust_
+
+Monujo is a minimal **Go CLI** tool for **Tron blockchain** and **USDT (TRC-20)** operations. It provides secure cryptocurrency management with multiple operational modes to suit different security requirements.
+
+## Features
+
+- **Watch-only mode**: Query balances and transaction history for any Tron address without requiring private keys
+- **Hot wallet**: Local encrypted keystore for secure sending of TRX and USDT with interactive confirmation
+- **Offline signing**: Air-gapped workflow for maximum security with `build | sign | broadcast` commands
+- **Multi-network support**: Works with both mainnet and Shasta testnet
+- **Secure storage**: Encrypted keystore using Argon2id + AES-256-GCM with automatic migration from legacy formats
+- **Key management**: Create new wallets or import existing private keys with passphrase protection
+- **Native TRC-20 support**: Built-in support for USDT transfers with fixed contract addresses
+
+Designed for security-conscious users who need reliable cryptocurrency operations without the complexity of full wallets.
 
 Minimal **Go CLI** for **Tron / TRC-20 / USDT**: watch-only queries for cold addresses (no keys), **hot wallet** send flows with a **local encrypted keystore**, and an **air-gapped offline signer** (`monujo offline build|sign|broadcast`) for cold-storage workflows. Solana/BEP are out of scope.
 

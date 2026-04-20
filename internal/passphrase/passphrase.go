@@ -51,7 +51,7 @@ const (
 
 // Defaults used by the CLI when the user does not override them.
 const (
-	DefaultWords     = 7
+	DefaultWords     = 12
 	DefaultSeparator = " "
 	DefaultDict      = DictEnglish
 )

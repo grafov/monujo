@@ -20,25 +20,40 @@ EFF Short Wordlist #1. Same formatting caveat as above.
 - Source: https://www.eff.org/files/2016/09/08/eff_short_wordlist_1.txt
 - License: CC BY 3.0 US (Electronic Frontier Foundation, 2016).
 
-## esperanto.txt (4096 words)
+## esperanto.txt (14851 words)
 
-Top 4096 distinct Esperanto lemmas, lengths 3–7 characters (runes), built
-from a Tekstaro corpus frequency list filtered with ESPDIC. Keeps full
-Esperanto orthography including diacritics `ĉ ĝ ĥ ĵ ŝ ŭ`. NFKC-idempotent.
+Merged frequency lemmas from:
 
-- Upstream: https://github.com/Vanege/esperanto-frequency-list-tekstaro
-  (file: `EO 15000 Tekstaro filtered with ESPDIC.txt`)
-- License: CC BY-SA 4.0.
-- Size chosen as 4096 (= 2^12, exactly 12 bits of entropy per word).
+1. **Wiktionary** — [Frequency lists/Esperanto/Wikipedia
+   2023](https://en.wiktionary.org/wiki/Wiktionary:Frequency_lists/Esperanto/Wikipedia_2023)
+   (15 000 surface lemmas from the 2023-03-01 Esperanto Wikipedia dump;
+   stored verbatim in `upstream/esperanto_wikipedia_2023.txt`).
+2. **Tekstaro** — the previous embedded list (originally the top 4096
+   lemmas from
+   [Vanege/esperanto-frequency-list-tekstaro](https://github.com/Vanege/esperanto-frequency-list-tekstaro),
+   file `EO 15000 Tekstaro filtered with ESPDIC.txt`), merged so rare
+   Fundamento/PMEG roots not present in the Wiki list are retained.
 
-## esperanto_x.txt (4096 words)
+Processing (see `gen/esperanto/main.go`): `strings.ToLower` → Unicode NFC
+→ keep only words matching `^[a-zĉĝĥĵŝŭ]{3,12}$` (runes) → NFKC-idempotent
+per [keystore.NormalizePassphrase](../../keystore/passphrase.go) → union and
+dedupe → drop any lemma whose x-system form exceeds 12 runes (so
+`esperanto` and `esperanto_x` stay the same cardinality) → if two lemmas
+share one x-system spelling, keep the lexicographically smallest lemma →
+sort. Full Esperanto orthography `ĉ ĝ ĥ ĵ ŝ ŭ`. Effective size **14851**
+words (~**13.858** bits per word, `log2(14851)`).
 
-Same set as `esperanto.txt`, with the diacritics rewritten in Zamenhof's
+- License: CC BY-SA 4.0 (Wiktionary content; Tekstaro upstream is also
+  CC BY-SA 4.0).
+
+## esperanto_x.txt (14851 words)
+
+Same lemmas as `esperanto.txt`, with diacritics rewritten in Zamenhof's
 x-system (`ĉ→cx`, `ĝ→gx`, `ĥ→hx`, `ĵ→jx`, `ŝ→sx`, `ŭ→ux`). ASCII-only;
-typeable on any QWERTY/AZERTY keyboard without Esperanto input method.
+typeable on any QWERTY/AZERTY keyboard without an Esperanto input method.
 
-- Derived from `esperanto.txt` by the generation script documented above.
-- License: CC BY-SA 4.0 (inherits from source).
+- Produced by the same generator as `esperanto.txt`.
+- License: CC BY-SA 4.0 (inherits from the sources above).
 
 ## russian.txt (4096 words)
 
@@ -56,8 +71,13 @@ these are acceptable for passphrase generation.
 
 ## Regeneration
 
-If you need to regenerate these lists (e.g. to bump sizes), follow the
-steps recorded in the repository history (see the commit that introduced
-the `internal/passphrase` package). The generation process is purely
-deterministic given upstream inputs, but upstream files may change —
-always re-run the embedded validation tests after regeneration.
+- **Esperanto** (diacritic + x-system): from the repository root run  
+  `go run ./internal/passphrase/wordlists/gen/esperanto`  
+  The tool reads `upstream/esperanto_wikipedia_2023.txt` and the current
+  `esperanto.txt`, then overwrites `esperanto.txt` and `esperanto_x.txt`.
+  After changing upstream inputs, always run `make test` to re-validate
+  embed constraints.
+
+- Other lists: follow the steps recorded in the repository history if you
+  need to bump sizes. Upstream files may change — always re-run the
+  embedded validation tests after regeneration.

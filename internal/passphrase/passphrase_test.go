@@ -186,8 +186,8 @@ var _ = Describe("dictionary metadata", func() {
 		cases := map[DictID]int{
 			DictEnglish:      7776,
 			DictEnglishShort: 1296,
-			DictEsperantoX:   4096,
-			DictEsperanto:    4096,
+			DictEsperantoX:   14851,
+			DictEsperanto:    14851,
 			DictRussian:      4096,
 		}
 
