@@ -90,10 +90,13 @@ func (o *OfflineService) isTerminal(fallback bool) bool {
 }
 
 // BuildOptions carries inputs for [OfflineService.Build].
+//
+// FromAddress is a Tron base58 address; name↔address resolution is done
+// by the CLI layer via resolveWalletFrom so the service only deals with
+// a validated address.
 type BuildOptions struct {
 	Kind           string // transfer.KindTRX or transfer.KindTRC20USDT
-	FromAddress    string // mandatory: cold wallet address (no keystore lookup)
-	FromName       string // optional: resolve address via keystore.ListWallets without decryption
+	FromAddress    string // Tron base58 address of the cold wallet
 	To             string
 	AmountTRX      string // for KindTRX
 	AmountUSDT     string // for KindTRC20USDT
@@ -103,26 +106,11 @@ type BuildOptions struct {
 	IsTerminal     bool   // whether stdin is a tty (caller resolved this)
 }
 
-// resolveFromAddress applies opts.FromAddress vs FromName precedence and
-// validates the result. Both fields are filled by the CLI layer from the
-// single --from flag; FromAddress wins when both happen to be set.
+// resolveFromAddress validates opts.FromAddress. The CLI layer already
+// maps the unified --from flag (name or base58) to a base58 address, so
+// all that remains here is trimming and Tron-format validation.
 func (o *OfflineService) resolveFromAddress(opts BuildOptions) (string, error) {
 	addr := strings.TrimSpace(opts.FromAddress)
-	if addr == "" && opts.FromName != "" {
-		items, err := keystore.ListWallets(o.ks)
-		if err != nil {
-			return "", fmt.Errorf("resolve --from wallet name: %w", err)
-		}
-		for _, w := range items {
-			if w.Name == opts.FromName {
-				addr = w.Address
-				break
-			}
-		}
-		if addr == "" {
-			return "", fmt.Errorf("wallet %q not found in keystore %q", opts.FromName, o.ks)
-		}
-	}
 	if addr == "" {
 		return "", errors.New("--from must be provided (Tron base58 address or keystore wallet name)")
 	}

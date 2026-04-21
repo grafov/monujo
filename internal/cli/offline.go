@@ -9,17 +9,8 @@ import (
 	"github.com/grafov/monujo/internal/app"
 	"github.com/grafov/monujo/internal/keystore"
 	"github.com/grafov/monujo/internal/transfer"
-	"github.com/grafov/monujo/internal/tron"
 	"github.com/spf13/cobra"
 )
-
-// looksLikeTronAddress reports whether s passes Tron base58 address
-// validation. The CLI uses this to disambiguate the unified --from flag
-// between a wallet name and a raw base58 address: anything that parses
-// as an address is treated as one, anything else as a wallet name.
-func looksLikeTronAddress(s string) bool {
-	return tron.ValidateBase58Address(strings.TrimSpace(s)) == nil
-}
 
 func newOfflineCmd() *cobra.Command {
 	o := &cobra.Command{
@@ -79,13 +70,22 @@ func newOfflineBuildCmd() *cobra.Command {
 unsigned transfer transaction. The output file can then be carried to an
 offline machine for signing.
 
-This command does NOT need access to the keystore. The --from flag
-accepts either a Tron base58 address (T..., 34 chars) or, if a keystore
-happens to be present on this online machine, a wallet name from it (no
-decryption is performed). The interpretation is automatic: anything that
-parses as a base58 address is treated as one, anything else as a name.`,
+This command does NOT strictly need access to the keystore. The --from
+flag accepts either a Tron base58 address (T..., 34 chars) or, if a
+keystore happens to be present on this online machine, a wallet name
+from it (no decryption is performed). The interpretation is automatic:
+anything that parses as a base58 address is treated as one, anything
+else as a name.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			_, addr, _, err := resolveWalletFrom(cfg.KeystoreDir, from)
+			if err != nil {
+				return err
+			}
+			toAddr, err := resolveRecipient(cfg.KeystoreDir, to)
 			if err != nil {
 				return err
 			}
@@ -94,18 +94,14 @@ parses as a base58 address is treated as one, anything else as a name.`,
 
 			opts := app.BuildOptions{
 				Kind:           kind,
-				To:             to,
+				FromAddress:    addr,
+				To:             toAddr,
 				AmountTRX:      amount,
 				AmountUSDT:     amount,
 				Note:           note,
 				OutPath:        out,
 				HMACPassphrase: pass,
 				IsTerminal:     stdinIsTerminal(),
-			}
-			if looksLikeTronAddress(from) {
-				opts.FromAddress = strings.TrimSpace(from)
-			} else {
-				opts.FromName = strings.TrimSpace(from)
 			}
 
 			svc := app.NewOfflineService(cfg)
@@ -115,7 +111,7 @@ parses as a base58 address is treated as one, anything else as a name.`,
 		},
 	}
 	cmd.Flags().StringVar(&from, "from", "", "Sender: Tron base58 address (cold wallet) OR keystore wallet name")
-	cmd.Flags().StringVar(&to, "to", "", "Recipient Tron base58 address")
+	cmd.Flags().StringVar(&to, "to", "", "Recipient: Tron base58 address OR keystore wallet name (resolved to its address)")
 	cmd.Flags().StringVar(&amount, "amount", "", "Amount: TRX decimal for --kind=trx, USDT decimal for --kind=usdt")
 	cmd.Flags().StringVar(&kind, "kind", "trx", "Transfer kind: trx or usdt")
 	cmd.Flags().StringVar(&note, "note", "", "Optional human-readable note carried alongside the unsigned tx")
@@ -163,20 +159,26 @@ one), recompute the human-readable fields from the embedded raw_data,
 print them for visual inspection and ask for confirmation before signing
 with the keystore wallet referenced by --from.
 
-The --from flag here MUST be a keystore wallet name; passing a base58
-address is rejected (sign needs the private key, which is only
-addressable by name on this machine).
+The --from flag accepts either a keystore wallet name or a Tron base58
+address. Address input is resolved against the local keystore (via the
+plaintext address metadata) into the corresponding wallet name; an
+address that is not present in the keystore is rejected because offline
+sign needs the private key.
 
 The wallet's address must match the unsigned payload's "from" field;
 otherwise this command refuses to load the key. This protects against
 accidentally signing with a different cold wallet on the offline machine.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if looksLikeTronAddress(from) {
-				return fmt.Errorf("offline sign --from expects a keystore wallet name, not a base58 address (got %q)", from)
-			}
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
+			}
+			name, addr, ok, err := resolveWalletFrom(cfg.KeystoreDir, from)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("address %q not found in keystore %q; offline sign needs the private key, pass the wallet name instead", addr, cfg.KeystoreDir)
 			}
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
@@ -191,7 +193,7 @@ accidentally signing with a different cold wallet on the offline machine.`,
 			_, err = svc.Sign(app.SignOptions{
 				InPath:         in,
 				OutPath:        out,
-				WalletName:     from,
+				WalletName:     name,
 				WalletPass:     pass,
 				HMACPassphrase: hmac,
 				Yes:            yes,
@@ -203,7 +205,7 @@ accidentally signing with a different cold wallet on the offline machine.`,
 	}
 	cmd.Flags().StringVar(&in, "in", "", "Path to the unsigned envelope JSON file")
 	cmd.Flags().StringVar(&out, "out", "", "Path for the signed envelope JSON file (use - for stdout)")
-	cmd.Flags().StringVar(&from, "from", "", "Keystore wallet name (its address must match the unsigned payload's from)")
+	cmd.Flags().StringVar(&from, "from", "", "Keystore wallet name OR Tron base58 address (must map to a local wallet)")
 	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive confirmation prompt (for scripts)")

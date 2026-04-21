@@ -152,6 +152,21 @@ func (h *HotService) PrintBalanceByName(ctx context.Context, name string) error 
 	return fmt.Errorf("wallet %q not found in keystore %q", name, h.ks)
 }
 
+// PrintBalanceByAddress is the keystore-free counterpart of
+// [HotService.PrintBalanceByName] used when --from is a raw Tron base58
+// address rather than a keystore wallet name. It validates the address
+// and delegates to [WatchService.PrintBalance].
+//
+// No keystore lookup is performed: balance is a read-only operation on
+// the Tron network, so the caller does not need a local wallet file.
+func (h *HotService) PrintBalanceByAddress(ctx context.Context, addr string) error {
+	if err := tron.ValidateBase58Address(addr); err != nil {
+		return err
+	}
+	ws := NewWatchService(h.cfg)
+	return ws.PrintBalance(ctx, addr)
+}
+
 // SendTRX sends TRX from named wallet.
 func (h *HotService) SendTRX(ctx context.Context, name, to string, amountTRX string, pass []byte) error {
 	amountSun, err := domain.ParseTRXDecimal(amountTRX)

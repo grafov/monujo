@@ -43,9 +43,17 @@ make build                                    # binary at build/monujo
 ./build/monujo wallet import --name imported --key-hex <64_HEX>
 
 # Network operations (passphrase required only for signing; balance needs none)
+#
+# --from and --to for hot and offline commands accept either a keystore
+# wallet name or a Tron base58 address (auto-detected). Balance works
+# with any address; send/sign require --from to map to a local wallet.
+# --to is just a recipient; any valid base58 works, or a wallet name to
+# save typing when sending between your own wallets.
 ./build/monujo hot balance   --from myhot
+./build/monujo hot balance   --from T...                 # arbitrary address, no keystore needed
 ./build/monujo hot activate  --from funding --to T... --amount 1
 ./build/monujo hot send-trx  --from myhot --to T... --amount 12.5
+./build/monujo hot send-trx  --from myhot --to mycold --amount 12.5   # recipient by wallet name
 ./build/monujo hot send-usdt --from myhot --to T... --amount 10.25
 
 # Test network
