@@ -1,81 +1,88 @@
-# Руководство пользователя monujo
+# monujo User Guide
 
-`monujo` — минималистичный CLI на Go для работы с сетью **TRON**: чтение
-балансов и истории переводов **TRC‑20 USDT** для холодных адресов
-(только публичные данные, без приватных ключей), управление **локальным
-зашифрованным хранилищем ключей** (создание/импорт), операции
-**горячего кошелька** (онлайн‑подпись и отправка TRX/USDT) и
-**air‑gap‑подписание** для холодного хранения.
+`monujo` is a minimalist Go CLI for working with the **TRON** network:
+reading balances and **TRC-20 USDT** transfer history for cold
+addresses (public data only, no private keys), managing a **local
+encrypted keystore** (create/import), **hot wallet** operations
+(online signing and sending TRX/USDT) and **air-gap signing** for
+cold storage.
 
-В этой документации подробно описано, как устроен бинарник, какие у
-него команды, флаги и переменные окружения, как хранятся ключи и какие
-типичные сценарии использования предусмотрены.
+This documentation describes in detail how the binary is organized,
+what commands, flags and environment variables it exposes, how keys
+are stored, and which typical usage scenarios are supported.
 
-## Содержание
+## Contents
 
-| Раздел                                              | О чём                                                                                                                                                 |
-|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [01 — Обзор и архитектура](01-overview.md)          | Что делает программа, из каких компонентов состоит, модель угроз.                                                                                     |
-| [02 — Сборка и установка](02-installation.md)       | Требования к окружению, `make build`, установка бинарника, версии.                                                                                    |
-| [03 — Глобальная конфигурация](03-configuration.md) | Все глобальные флаги (`--network`, `--output`, `--http-url`, `--grpc-url`, `--api-key`, `--keystore-dir`) и переменные окружения.                     |
-| [04 — Команды `watch`](04-watch-commands.md)        | Подробный справочник по `watch balance` и `watch txs`.                                                                                                |
-| [05 — Команды `hot`](05-hot-commands.md)            | Подробный справочник по `hot balance`, `hot activate`, `hot send-trx`, `hot send-usdt` (онлайн‑операции).                                              |
-| [06 — Хранилище ключей](06-keystore.md)             | Формат v2 (Argon2id) и legacy v1 (scrypt) с автомиграцией, KDF/шифрование, метаданные сетей, соответствие стандартам, резервное копирование.          |
-| [07 — Сети и контракты](07-networks.md)             | Mainnet и Shasta, эндпойнты по умолчанию, адреса контрактов USDT, лимиты комиссий.                                                                    |
-| [08 — Типовые сценарии](08-scenarios.md)            | Пошаговые рецепты: проверка холодного адреса, создание горячего кошелька, активация, отправка USDT, тестирование на Shasta, скриптовое использование. |
-| [09 — Устранение неполадок](09-troubleshooting.md)  | Расшифровка ошибок и способы их обхода.                                                                                                               |
-| [10 — Команды `offline`](10-offline-commands.md)    | Air-gap сценарий: `offline build` (онлайн), `offline sign` (офлайн), `offline broadcast` (онлайн); формат конверта, HMAC, изоляция keystore.          |
-| [11 — Команды `wallet`](11-wallet-commands.md)      | Lifecycle файла keystore: `wallet list`, `wallet create`, `wallet import`. Эти команды не ходят в сеть и работают и онлайн, и на air‑gap‑машине.       |
+| Section                                             | About                                                                                                                                                    |
+|-----------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [01 — Overview and architecture](01-overview.md)    | What the program does, which components it is made of, threat model.                                                                                     |
+| [02 — Build and install](02-installation.md)        | Environment requirements, `make build`, binary installation, versions.                                                                                   |
+| [03 — Global configuration](03-configuration.md)    | All global flags (`--network`, `--output`, `--http-url`, `--grpc-url`, `--api-key`, `--keystore-dir`) and environment variables.                         |
+| [04 — `watch` commands](04-watch-commands.md)       | Detailed reference for `watch balance` and `watch txs`.                                                                                                  |
+| [05 — `hot` commands](05-hot-commands.md)           | Detailed reference for `hot balance`, `hot activate`, `hot send-trx`, `hot send-usdt` (online operations).                                               |
+| [06 — Keystore](06-keystore.md)                     | v2 format (Argon2id) and legacy v1 (scrypt) with auto-migration, KDF/encryption, network metadata, standards compliance, backup.                         |
+| [07 — Networks and contracts](07-networks.md)       | Mainnet and Shasta, default endpoints, USDT contract addresses, fee limits.                                                                              |
+| [08 — Typical scenarios](08-scenarios.md)           | Step-by-step recipes: cold address checking, hot wallet creation, activation, sending USDT, testing on Shasta, scripted usage.                           |
+| [09 — Troubleshooting](09-troubleshooting.md)       | Decoding errors and ways to work around them.                                                                                                            |
+| [10 — `offline` commands](10-offline-commands.md)   | Air-gap scenario: `offline build` (online), `offline sign` (offline), `offline broadcast` (online); envelope format, HMAC, keystore isolation.           |
+| [11 — `wallet` commands](11-wallet-commands.md)     | Keystore file lifecycle: `wallet list`, `wallet create`, `wallet import`. These commands do not touch the network and work both online and on air-gap.   |
 
-## Краткая шпаргалка
+## Quick reference
 
 ```bash
-# Сборка
-make build                                    # бинарник build/monujo
+# Build
+make build                                    # binary at build/monujo
 
-# Watch‑only (без ключей)
+# Watch-only (no keys)
 ./build/monujo watch balance --addr T...
 ./build/monujo watch txs     --addr T... --limit 50
 
-# Управление кошельками (без сети)
+# Wallet management (offline)
 ./build/monujo wallet list
 ./build/monujo wallet create --name myhot
 ./build/monujo wallet import --name imported --key-hex <64_HEX>
 
-# Операции на сети (пароль нужен только для подписи; balance — без пароля)
+# Network operations (passphrase required only for signing; balance needs none)
 ./build/monujo hot balance   --from myhot
 ./build/monujo hot activate  --from funding --to T... --amount 1
 ./build/monujo hot send-trx  --from myhot --to T... --amount 12.5
 ./build/monujo hot send-usdt --from myhot --to T... --amount 10.25
 
-# Тестовая сеть
+# Test network
 ./build/monujo --network shasta watch balance --addr T...
 
-# Машинно-читаемый вывод
+# Machine-readable output
 ./build/monujo --output json watch balance --addr T...
 
-# Air-gap (оффлайн-подпись)
+# Air-gap (offline signing)
 ./build/monujo offline build      --from T...cold --to T...rcpt --amount 12.5 --kind trx --out tx.unsigned.json
-./build/monujo offline sign       --in tx.unsigned.json --from cold --out tx.signed.json   # на офлайн-ПК
+./build/monujo offline sign       --in tx.unsigned.json --from cold --out tx.signed.json   # on the offline PC
 ./build/monujo offline broadcast  --in tx.signed.json
+
+# Backup / transfer the whole keystore as a single encrypted archive (age + tar).
+./build/monujo tool vault pack   --out backup.age
+./build/monujo tool vault unpack --in backup.age --out /tmp/restore
 ```
 
-## Важные предупреждения
+## Important warnings
 
-- `monujo` — **не аппаратный кошелёк**. Безопасность держится на: доверенной
-  сборке, доверенной машине, правах `0600` на файлах keystore, надёжной
-  парольной фразе и (опционально) API‑ключе TronGrid.
-- **Бэкап keystore обязателен.** Копируйте `~/.config/monujo/keystore/<имя>.json`
-  на отдельный носитель, пароль храните отдельно. Подробная процедура и
-  рекомендации — в [06-keystore.md → «Резервное копирование keystore»](06-keystore.md#резервное-копирование-keystore).
-- **FIPS / compliance.** monujo не сертифицирован как криптомодуль и
-  использует Argon2id (не FIPS-approved). Для регулируемых сред см.
-  [06-keystore.md → «Соответствие стандартам»](06-keystore.md#соответствие-стандартам).
-- Никогда не коммитьте файлы keystore, парольные фразы или hex‑ключи в
-  репозиторий. Переменная `MONUJO_IMPORT_KEY` поддерживается только для
-  скриптовых сценариев в контролируемом окружении.
-- `wallet create --export-private-key` печатает приватный ключ в открытом
-  виде один раз — используйте только если осознанно принимаете риск.
-- Контракт USDT на Shasta (`TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs`) — это
-  тестовый токен, **не настоящий Tether**. Реальный USDT существует
-  только на mainnet.
+- `monujo` is **not a hardware wallet**. Its security depends on: a
+  trusted build, a trusted machine, `0600` permissions on keystore
+  files, a strong passphrase, and (optionally) a TronGrid API key.
+- **Keystore backup is mandatory.** Copy `~/.config/monujo/keystore/<name>.json`
+  to a separate medium and store the passphrase separately. To move
+  the whole directory as a single encrypted archive use
+  `monujo tool vault pack/unpack` (age scrypt-mode, no exec into an
+  external binary). Detailed procedure and recommendations are in
+  [06-keystore.md → «Резервное копирование keystore»](06-keystore.md#резервное-копирование-keystore).
+- **FIPS / compliance.** monujo is not certified as a crypto module
+  and uses Argon2id (not FIPS-approved). For regulated environments
+  see [06-keystore.md → «Соответствие стандартам»](06-keystore.md#соответствие-стандартам).
+- Never commit keystore files, passphrases or hex keys into the
+  repository. The `MONUJO_IMPORT_KEY` variable is supported only for
+  scripted scenarios in a controlled environment.
+- `wallet create --export-private-key` prints the private key in
+  plaintext once — use it only if you knowingly accept the risk.
+- The USDT contract on Shasta (`TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs`)
+  is a test token, **not real Tether**. Real USDT exists on mainnet
+  only.

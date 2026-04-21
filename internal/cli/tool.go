@@ -18,6 +18,7 @@ func newToolCmd() *cobra.Command {
 		Short: "Miscellaneous helpers (passphrase generator, ...)",
 	}
 	c.AddCommand(newToolGenpassCmd())
+	c.AddCommand(newToolVaultCmd())
 	return c
 }
 

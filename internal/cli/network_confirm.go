@@ -13,6 +13,12 @@ import (
 	"golang.org/x/term"
 )
 
+// isAffirmative reports whether a normalized (trimmed, lowercased)
+// interactive prompt answer means "yes". Accepts "y" and "yes".
+func isAffirmative(line string) bool {
+	return line == "y" || line == "yes"
+}
+
 // stdinIsTerminal reports whether stdin is attached to a terminal.
 // It validates the os.Stdin file descriptor (a uintptr) fits into int
 // before passing it to term.IsTerminal, so the conversion can never overflow.
@@ -49,7 +55,7 @@ func confirmWalletNetworkForOperation(cfg *config.Config, walletName string, for
 		return err
 	}
 	line = strings.TrimSpace(strings.ToLower(line))
-	if line == "y" || line == "yes" {
+	if isAffirmative(line) {
 		return nil
 	}
 	return fmt.Errorf("aborted")
@@ -88,7 +94,7 @@ func confirmWalletOverwrite(cfg *config.Config, walletName string, overwrite boo
 		return err
 	}
 	line = strings.TrimSpace(strings.ToLower(line))
-	if line == "y" || line == "yes" {
+	if isAffirmative(line) {
 		return nil
 	}
 	return fmt.Errorf("aborted")
