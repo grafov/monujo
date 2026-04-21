@@ -81,7 +81,7 @@ else as a name.`,
 			if err != nil {
 				return err
 			}
-			_, addr, _, err := resolveWalletFrom(cfg.KeystoreDir, from)
+			_, addr, _, err := resolveWalletFrom(cfg.KeystoreDir, from, "--from")
 			if err != nil {
 				return err
 			}
@@ -145,7 +145,7 @@ func newOfflineSignCmd() *cobra.Command {
 	var (
 		in       string
 		out      string
-		from     string
+		addr     string
 		hmacPass string
 		hmacEnv  string
 		yes      bool
@@ -157,9 +157,9 @@ func newOfflineSignCmd() *cobra.Command {
 		Long: `Read an unsigned transfer envelope, verify its HMAC (if the file has
 one), recompute the human-readable fields from the embedded raw_data,
 print them for visual inspection and ask for confirmation before signing
-with the keystore wallet referenced by --from.
+with the keystore wallet referenced by --addr.
 
-The --from flag accepts either a keystore wallet name or a Tron base58
+The --addr flag accepts either a keystore wallet name or a Tron base58
 address. Address input is resolved against the local keystore (via the
 plaintext address metadata) into the corresponding wallet name; an
 address that is not present in the keystore is rejected because offline
@@ -173,12 +173,12 @@ accidentally signing with a different cold wallet on the offline machine.`,
 			if err != nil {
 				return err
 			}
-			name, addr, ok, err := resolveWalletFrom(cfg.KeystoreDir, from)
+			name, resolvedAddr, ok, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
 			if err != nil {
 				return err
 			}
 			if !ok {
-				return fmt.Errorf("address %q not found in keystore %q; offline sign needs the private key, pass the wallet name instead", addr, cfg.KeystoreDir)
+				return fmt.Errorf("address %q not found in keystore %q; offline sign needs the private key, pass the wallet name instead", resolvedAddr, cfg.KeystoreDir)
 			}
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
@@ -205,14 +205,14 @@ accidentally signing with a different cold wallet on the offline machine.`,
 	}
 	cmd.Flags().StringVar(&in, "in", "", "Path to the unsigned envelope JSON file")
 	cmd.Flags().StringVar(&out, "out", "", "Path for the signed envelope JSON file (use - for stdout)")
-	cmd.Flags().StringVar(&from, "from", "", "Keystore wallet name OR Tron base58 address (must map to a local wallet)")
+	cmd.Flags().StringVar(&addr, "addr", "", "Keystore wallet name OR Tron base58 address (must map to a local wallet)")
 	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive confirmation prompt (for scripts)")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip wallet network mismatch check")
 	_ = cmd.MarkFlagRequired("in")
 	_ = cmd.MarkFlagRequired("out")
-	_ = cmd.MarkFlagRequired("from")
+	_ = cmd.MarkFlagRequired("addr")
 	return cmd
 }
 

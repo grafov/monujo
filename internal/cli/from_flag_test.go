@@ -30,17 +30,25 @@ func stashWallet(dir, name string) string {
 }
 
 var _ = Describe("resolveWalletFrom", func() {
-	It("rejects an empty --from", func() {
+	It("rejects an empty value and names the --from flag", func() {
 		dir := GinkgoT().TempDir()
-		_, _, ok, err := resolveWalletFrom(dir, "")
+		_, _, ok, err := resolveWalletFrom(dir, "", "--from")
 		Expect(err).To(HaveOccurred())
 		Expect(ok).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring("--from must be provided"))
 	})
 
+	It("rejects an empty value and names the --addr flag", func() {
+		dir := GinkgoT().TempDir()
+		_, _, ok, err := resolveWalletFrom(dir, "", "--addr")
+		Expect(err).To(HaveOccurred())
+		Expect(ok).To(BeFalse())
+		Expect(err.Error()).To(ContainSubstring("--addr must be provided"))
+	})
+
 	It("errors on a wallet name that is not present in the keystore", func() {
 		dir := GinkgoT().TempDir()
-		_, _, ok, err := resolveWalletFrom(dir, "nonexistent")
+		_, _, ok, err := resolveWalletFrom(dir, "nonexistent", "--from")
 		Expect(err).To(HaveOccurred())
 		Expect(ok).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring(`wallet "nonexistent" not found`))
@@ -50,7 +58,7 @@ var _ = Describe("resolveWalletFrom", func() {
 		dir := GinkgoT().TempDir()
 		addr := stashWallet(dir, "alice")
 
-		name, got, ok, err := resolveWalletFrom(dir, "alice")
+		name, got, ok, err := resolveWalletFrom(dir, "alice", "--from")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ok).To(BeTrue())
 		Expect(name).To(Equal("alice"))
@@ -61,7 +69,7 @@ var _ = Describe("resolveWalletFrom", func() {
 		dir := GinkgoT().TempDir()
 		addr := stashWallet(dir, "bob")
 
-		name, got, ok, err := resolveWalletFrom(dir, addr)
+		name, got, ok, err := resolveWalletFrom(dir, addr, "--from")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ok).To(BeTrue())
 		Expect(name).To(Equal("bob"))
@@ -72,7 +80,7 @@ var _ = Describe("resolveWalletFrom", func() {
 		dir := GinkgoT().TempDir()
 		const foreign = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
 
-		name, got, ok, err := resolveWalletFrom(dir, foreign)
+		name, got, ok, err := resolveWalletFrom(dir, foreign, "--from")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ok).To(BeFalse())
 		Expect(name).To(BeEmpty())
@@ -81,7 +89,7 @@ var _ = Describe("resolveWalletFrom", func() {
 
 	It("treats gibberish neither base58 nor matching a name as a name lookup error", func() {
 		dir := GinkgoT().TempDir()
-		_, _, ok, err := resolveWalletFrom(dir, "not-an-addr-and-not-a-name")
+		_, _, ok, err := resolveWalletFrom(dir, "not-an-addr-and-not-a-name", "--from")
 		Expect(err).To(HaveOccurred())
 		Expect(ok).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring("not found"))
@@ -91,7 +99,7 @@ var _ = Describe("resolveWalletFrom", func() {
 		dir := GinkgoT().TempDir()
 		addr := stashWallet(dir, "carol")
 
-		name, got, ok, err := resolveWalletFrom(dir, "   carol   ")
+		name, got, ok, err := resolveWalletFrom(dir, "   carol   ", "--from")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ok).To(BeTrue())
 		Expect(name).To(Equal("carol"))

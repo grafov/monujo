@@ -9,11 +9,11 @@ import (
 )
 
 // The offline CLI path does not itself decrypt anything, so these tests
-// only cover --from resolution: the cobra command must refuse addresses
+// only cover --addr/--from resolution: the cobra command must refuse addresses
 // that are not present in the local keystore *before* it asks for the
 // keystore passphrase, and must keep accepting wallet names.
 
-var _ = Describe("offline sign --from resolution", func() {
+var _ = Describe("offline sign --addr resolution", func() {
 	It("rejects a base58 address that is not in the keystore", func() {
 		dir := GinkgoT().TempDir()
 
@@ -26,7 +26,7 @@ var _ = Describe("offline sign --from resolution", func() {
 			"offline", "sign",
 			"--in", "/dev/null",
 			"--out", "-",
-			"--from", "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM",
+			"--addr", "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM",
 		})
 
 		err := root.Execute()
@@ -47,7 +47,7 @@ var _ = Describe("offline sign --from resolution", func() {
 			"offline", "sign",
 			"--in", "/dev/null",
 			"--out", "-",
-			"--from", "missing",
+			"--addr", "missing",
 		})
 
 		err := root.Execute()

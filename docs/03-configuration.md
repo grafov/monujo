@@ -83,7 +83,7 @@ keystore сеть всегда хранится в нижнем регистре
 - `grpc.shasta.trongrid.io:50051` (shasta)
 
 Используется для всех операций, которые подписывают и рассылают
-транзакции (`hot activate`, `hot send-trx`, `hot send-usdt`).
+транзакции (`hot send-trx`, `hot send-usdt`).
 Соединение всегда **plaintext** (без TLS), что соответствует
 конвенции публичных Tron‑gRPC (TronGrid сам проксирует).
 

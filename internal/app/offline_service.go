@@ -107,7 +107,7 @@ type BuildOptions struct {
 }
 
 // resolveFromAddress validates opts.FromAddress. The CLI layer already
-// maps the unified --from flag (name or base58) to a base58 address, so
+// maps offline build --from (name or base58) to a base58 address, so
 // all that remains here is trimming and Tron-format validation.
 func (o *OfflineService) resolveFromAddress(opts BuildOptions) (string, error) {
 	addr := strings.TrimSpace(opts.FromAddress)

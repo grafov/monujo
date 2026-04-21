@@ -39,8 +39,8 @@ monujo wallet
   `a-z`, `A-Z`, `0-9`, `-` и `_`. Прочие символы заменяются на `_`.
   Пустое имя превращается в `default` (так что `--name " "` создаст
   файл `default.json`).
-- **`--from` в `wallet check`**. Значение трактуется так же, как в
-  командах `hot` и `offline`: строка, похожая на Tron base58-адрес,
+- **`--addr` в `wallet check`**. Значение трактуется так же, как в
+  `hot balance` и `offline sign`: строка, похожая на Tron base58-адрес,
   ищется среди локальных кошельков по полю `address` в JSON; иначе
   строка считается **именем** кошелька. Для проверки нужен файл в
   keystore (произвольный чужой адрес без локального файла не
@@ -302,20 +302,20 @@ Keystore: /home/user/.config/monujo/keystore
 ### Использование
 
 ```bash
-monujo wallet check --from <ИМЯ_КОШЕЛЬКА>
-monujo wallet check --from T...   # если адрес есть в wallet list
-monujo --output json wallet check --from myhot
+monujo wallet check --addr <ИМЯ_КОШЕЛЬКА>
+monujo wallet check --addr T...   # если адрес есть в wallet list
+monujo --output json wallet check --addr myhot
 ```
 
 ### Флаги
 
 | Флаг     | Тип    | Обязательный | По умолчанию | Описание |
 |----------|--------|--------------|--------------|----------|
-| `--from` | string | да           | —            | Имя кошелька в keystore **или** его Tron base58-адрес (как в `hot` / `offline`). Адрес без соответствующего локального файла даёт ошибку. |
+| `--addr` | string | да           | —            | Имя кошелька в keystore **или** его Tron base58-адрес (как в `hot balance` / `offline sign`). Адрес без соответствующего локального файла даёт ошибку. |
 
 ### Что происходит
 
-1. По `--from` находится запись в локальном keystore (только чтение
+1. По `--addr` находится запись в локальном keystore (только чтение
    метаданных списка).
 2. Один раз запрашивается парольная фраза (TTY без эха; в не-TTY
    можно передать фразу в stdin, завершающий перевод строки
@@ -337,4 +337,4 @@ monujo --output json wallet check --from myhot
 | `list`     | —                                                          | нет                                               |
 | `create`   | `--name`, `--export-private-key`, `--overwrite`, `--generate-*` | да (× 2 — новая фраза, либо генерация)         |
 | `import`   | `--name`, `--key-hex`, `--overwrite`, `--generate-*`       | да (× 2 — новая фраза, либо генерация)            |
-| `check`    | `--from`                                                   | да (один раз — существующая фраза)                |
+| `check`    | `--addr`                                                   | да (один раз — существующая фраза)                |

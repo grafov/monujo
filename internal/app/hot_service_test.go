@@ -28,13 +28,13 @@ var _ = Describe("HotService", func() {
 		Expect(pk.Address).NotTo(BeEmpty())
 	})
 
-	It("delegates account activation to SendTRX path and surfaces errors", func() {
+	It("SendTRX surfaces errors for missing wallet", func() {
 		dir := GinkgoT().TempDir()
 		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", dir)
 		Expect(err).NotTo(HaveOccurred())
 
 		svc := NewHotService(cfg)
-		err = svc.ActivateAccount(context.Background(), "missing", "TInvalid", "1", []byte("x"))
+		err = svc.SendTRX(context.Background(), "missing", "TInvalid", "1", []byte("x"))
 		Expect(err).To(HaveOccurred())
 	})
 

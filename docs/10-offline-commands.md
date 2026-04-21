@@ -35,7 +35,7 @@ flowchart LR
   по имени удобно, когда вы переводите между собственными
   кошельками и keystore доступен.
 - `offline sign` — единственная команда, которой нужен `--keystore-dir`
-  и пароль keystore. Её `--from` принимает либо имя кошелька, либо
+  и пароль keystore. Её **`--addr`** принимает либо имя кошелька, либо
   base58-адрес; адрес резолвится в имя через `keystore.ListWallets`
   (без расшифровки). Если переданный адрес не соответствует ни одному
   локальному кошельку, команда завершится ошибкой и попросит передать
@@ -117,7 +117,7 @@ HMAC покрывает строго те байты, что лежат на д�
 
 # offline PC (есть keystore, есть приватный ключ)
 ./monujo offline sign \
-    --in tx.unsigned.json --from cold --out tx.signed.json \
+    --in tx.unsigned.json --addr cold --out tx.signed.json \
     --hmac-passphrase-env MONUJO_HMAC
 # > вводите пароль keystore, читаете распарсенные поля, отвечаете y
 

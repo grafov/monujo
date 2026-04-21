@@ -119,15 +119,6 @@ func (h *HotService) ListWallets() error {
 	return nil
 }
 
-// ActivateAccount is a UX alias for [HotService.SendTRX]: sending the first
-// TRX to a new address makes the account visible to read APIs (which is
-// what users colloquially call "activating" the address). The behavior,
-// fees and confirmation prompts are identical to SendTRX; only the
-// command name in the CLI differs for readability.
-func (h *HotService) ActivateAccount(ctx context.Context, fromName, to string, amountTRX string, pass []byte) error {
-	return h.SendTRX(ctx, fromName, to, amountTRX, pass)
-}
-
 // PrintBalanceByName shows TRX/USDT for a named hot wallet without
 // requiring the keystore passphrase. The address is read from the
 // plaintext metadata of the encrypted wallet file (the same field that
@@ -153,7 +144,7 @@ func (h *HotService) PrintBalanceByName(ctx context.Context, name string) error 
 }
 
 // PrintBalanceByAddress is the keystore-free counterpart of
-// [HotService.PrintBalanceByName] used when --from is a raw Tron base58
+// [HotService.PrintBalanceByName] used when --addr is a raw Tron base58
 // address rather than a keystore wallet name. It validates the address
 // and delegates to [WatchService.PrintBalance].
 //

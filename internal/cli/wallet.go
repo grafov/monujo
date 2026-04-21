@@ -23,19 +23,7 @@ func newWalletCmd() *cobra.Command {
 private keys. None of these subcommands talk to the Tron network; the
 same files are consumed both by the online "hot" commands and by the
 air-gapped "offline sign" command.`,
-	}Добавь команду check, которая по адресу во "--from" (логика подстановки как в других командах -- определяем это имя или адрес) потребует ввод парольной фразы и сообщит подходит ли она к адресу или нет.
-	
-	Обновить документацию, объяснив, что команда check позволяет проверить валидность пары адрес-пароль, без совершения операций в сети. Для сверки с бекапом например, не перепуталось ли чего.
-	
-	   адресом.
-	   - Для `--from` в `hot send-*`/`hot activate`/`offline sign`
-	   - Для `--from` в `hot send-*`/`hot activate`/`offline sign`/`wallet check`
-		 программа ищет соответствие через `keystore.ListWallets` (по
-	Here is what was implemented.
-	
-	Command monujo wallet check
-	internal/cli/wallet.go: newWalletCheckCmd — --from via resolveWalletFrom; if the value is a base58 address but no local wallet exists, clear error; readUnlockPassphrase → keystore.LoadPrivateKey → pk.Wipe(); table line Passphrase matches keystore wallet "…" -> T… or JSON {"ok":true,"wallet":"…","address":"…"} when --output json.
-	Passphrase input (tests + pipes)
+	}
 	w.AddCommand(newWalletListCmd())
 	w.AddCommand(newWalletCreateCmd())
 	w.AddCommand(newWalletImportCmd())
@@ -44,7 +32,7 @@ air-gapped "offline sign" command.`,
 }
 
 func newWalletCheckCmd() *cobra.Command {
-	var from string
+	var addr string
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Verify the keystore passphrase unlocks the wallet (no network)",
@@ -59,12 +47,12 @@ actually loads the private key briefly in memory.`,
 			if err != nil {
 				return err
 			}
-			name, addr, ok, err := resolveWalletFrom(cfg.KeystoreDir, from)
+			name, resolvedAddr, ok, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
 			if err != nil {
 				return err
 			}
 			if !ok {
-				return fmt.Errorf("address %q not found in keystore %q; wallet check needs a local wallet (see wallet list), or pass --from as a wallet name", addr, cfg.KeystoreDir)
+				return fmt.Errorf("address %q not found in keystore %q; wallet check needs a local wallet (see wallet list), or pass --addr as a wallet name", resolvedAddr, cfg.KeystoreDir)
 			}
 			pass, err := readUnlockPassphrase(cmd, "Keystore passphrase: ")
 			if err != nil {
@@ -90,8 +78,8 @@ actually loads the private key briefly in memory.`,
 			return err
 		},
 	}
-	cmd.Flags().StringVar(&from, "from", "", "Keystore wallet name OR Tron base58 address listed in wallet list")
-	_ = cmd.MarkFlagRequired("from")
+	cmd.Flags().StringVar(&addr, "addr", "", "Keystore wallet name OR Tron base58 address listed in wallet list")
+	_ = cmd.MarkFlagRequired("addr")
 	return cmd
 }
 

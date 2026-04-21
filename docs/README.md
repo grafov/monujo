@@ -19,10 +19,10 @@ are stored, and which typical usage scenarios are supported.
 | [02 — Build and install](02-installation.md)        | Environment requirements, `make build`, binary installation, versions.                                                                                   |
 | [03 — Global configuration](03-configuration.md)    | All global flags (`--network`, `--output`, `--http-url`, `--grpc-url`, `--api-key`, `--keystore-dir`) and environment variables.                         |
 | [04 — `watch` commands](04-watch-commands.md)       | Detailed reference for `watch balance` and `watch txs`.                                                                                                  |
-| [05 — `hot` commands](05-hot-commands.md)           | Detailed reference for `hot balance`, `hot activate`, `hot send-trx`, `hot send-usdt` (online operations).                                               |
+| [05 — `hot` commands](05-hot-commands.md)           | Detailed reference for `hot balance`, `hot send-trx`, `hot send-usdt` (online operations).                                               |
 | [06 — Keystore](06-keystore.md)                     | v2 format (Argon2id) and legacy v1 (scrypt) with auto-migration, KDF/encryption, network metadata, standards compliance, backup.                         |
 | [07 — Networks and contracts](07-networks.md)       | Mainnet and Shasta, default endpoints, USDT contract addresses, fee limits.                                                                              |
-| [08 — Typical scenarios](08-scenarios.md)           | Step-by-step recipes: cold address checking, hot wallet creation, activation, sending USDT, testing on Shasta, scripted usage.                           |
+| [08 — Typical scenarios](08-scenarios.md)           | Step-by-step recipes: cold address checking, hot wallet creation, first TRX to an address, sending USDT, testing on Shasta, scripted usage.                           |
 | [09 — Troubleshooting](09-troubleshooting.md)       | Decoding errors and ways to work around them.                                                                                                            |
 | [10 — `offline` commands](10-offline-commands.md)   | Air-gap scenario: `offline build` (online), `offline sign` (offline), `offline broadcast` (online); envelope format, HMAC, keystore isolation.           |
 | [11 — `wallet` commands](11-wallet-commands.md)     | Keystore file lifecycle: `wallet list`, `wallet create`, `wallet import`, `wallet check` (offline passphrase verification). These commands do not touch the network and work both online and on air-gap.   |
@@ -41,18 +41,17 @@ make build                                    # binary at build/monujo
 ./build/monujo wallet list
 ./build/monujo wallet create --name myhot
 ./build/monujo wallet import --name imported --key-hex <64_HEX>
-./build/monujo wallet check --from myhot   # verify passphrase matches keystore (no network)
+./build/monujo wallet check --addr myhot   # verify passphrase matches keystore (no network)
 
 # Network operations (passphrase required only for signing; balance needs none)
 #
-# --from and --to for hot and offline commands accept either a keystore
-# wallet name or a Tron base58 address (auto-detected). Balance works
-# with any address; send/sign require --from to map to a local wallet.
-# --to is just a recipient; any valid base58 works, or a wallet name to
-# save typing when sending between your own wallets.
-./build/monujo hot balance   --from myhot
-./build/monujo hot balance   --from T...                 # arbitrary address, no keystore needed
-./build/monujo hot activate  --from funding --to T... --amount 1
+# --addr: hot balance, wallet check, offline sign (keystore name or base58;
+#   balance allows any address; check/sign need a local wallet).
+# --from / --to: hot send-trx, hot send-usdt, offline build (sender must map
+#   to a local wallet for hot sends; build can use cold base58 without keystore).
+./build/monujo hot balance   --addr myhot
+./build/monujo hot balance   --addr T...                 # arbitrary address, no keystore needed
+./build/monujo hot send-trx  --from funding --to T... --amount 1
 ./build/monujo hot send-trx  --from myhot --to T... --amount 12.5
 ./build/monujo hot send-trx  --from myhot --to mycold --amount 12.5   # recipient by wallet name
 ./build/monujo hot send-usdt --from myhot --to T... --amount 10.25
@@ -65,7 +64,7 @@ make build                                    # binary at build/monujo
 
 # Air-gap (offline signing)
 ./build/monujo offline build      --from T...cold --to T...rcpt --amount 12.5 --kind trx --out tx.unsigned.json
-./build/monujo offline sign       --in tx.unsigned.json --from cold --out tx.signed.json   # on the offline PC
+./build/monujo offline sign       --in tx.unsigned.json --addr cold --out tx.signed.json   # on the offline PC
 ./build/monujo offline broadcast  --in tx.signed.json
 
 # Backup / transfer the whole keystore as a single encrypted archive (age + tar).

@@ -33,7 +33,7 @@ export MONUJO_TRONGRID_API_KEY="..."
 ./build/monujo watch txs --addr TXYZ... --limit 200
 ```
 
-## Сценарий 2. Создать новый горячий кошелёк и активировать его
+## Сценарий 2. Создать новый горячий кошелёк и отправить на него первые TRX
 
 ```bash
 # 1. Создаём кошелёк (mainnet по умолчанию). Команда `wallet` — без сети.
@@ -52,11 +52,11 @@ export MONUJO_TRONGRID_API_KEY="..."
 # Private key (hex): 7b8a...
 ```
 
-Активация — в TRON аккаунт должен получить первую TRX. Команда
-`hot activate` — это UX-алиас на `hot send-trx`:
+В TRON аккаунт должен получить первую входящую TRX, чтобы появиться
+в read API. Отправьте небольшую сумму с уже пополненного кошелька:
 
 ```bash
-./build/monujo hot activate \
+./build/monujo hot send-trx \
   --from funding --to TLcVUPa... --amount 1
 # (просит парольную фразу funding)
 # Broadcast OK ...
@@ -87,7 +87,7 @@ history -d -1 -2              # удалить недавние строки и�
 ## Сценарий 4. Проверить баланс именованного кошелька
 
 ```bash
-./build/monujo hot balance --from myhot
+./build/monujo hot balance --addr myhot
 # TRX: ...
 # USDT: ...
 ```
@@ -113,7 +113,7 @@ history -d -1 -2              # удалить недавние строки и�
 баланс перед отправкой:
 
 ```bash
-./build/monujo hot balance --from myhot
+./build/monujo hot balance --addr myhot
 ```
 
 ## Сценарий 6. Отправить USDT
@@ -146,7 +146,7 @@ history -d -1 -2              # удалить недавние строки и�
 Проверка после поступления:
 
 ```bash
-./build/monujo --network shasta hot balance --from testhot
+./build/monujo --network shasta hot balance --addr testhot
 ```
 
 Отправка тестовых TRX/USDT:
@@ -171,7 +171,7 @@ history -d -1 -2              # удалить недавние строки и�
 При первой попытке использовать в новой сети:
 
 ```bash
-./build/monujo --network shasta hot balance --from myhot
+./build/monujo --network shasta hot balance --addr myhot
 # Warning: wallet "myhot" was previously used on network(s): mainnet
 # The current operation uses network "shasta", which is not in that list.
 # Continue? [y/N]: y

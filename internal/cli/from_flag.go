@@ -9,16 +9,18 @@ import (
 )
 
 // looksLikeTronAddress reports whether s passes Tron base58 address
-// validation. The CLI uses this to disambiguate the unified --from flag
-// between a wallet name and a raw base58 address: anything that parses
-// as an address is treated as one, anything else as a wallet name.
+// validation. The CLI uses this to disambiguate sender/subject flags
+// (--from or --addr) between a wallet name and a raw base58 address:
+// anything that parses as an address is treated as one, anything else
+// as a wallet name.
 func looksLikeTronAddress(s string) bool {
 	return tron.ValidateBase58Address(strings.TrimSpace(s)) == nil
 }
 
-// resolveWalletFrom interprets the shared --from flag value (either a
-// keystore wallet name or a Tron base58 address) and returns both the
-// wallet name and the base58 address it refers to.
+// resolveWalletFrom interprets the CLI value for --from or --addr (either
+// a keystore wallet name or a Tron base58 address) and returns both the
+// wallet name and the base58 address it refers to. flag is the flag name
+// for user-facing errors (e.g. "--from", "--addr").
 //
 // Behavior:
 //   - Empty input yields an error.
@@ -36,15 +38,15 @@ func looksLikeTronAddress(s string) bool {
 // The keystore is accessed via keystore.ListWallets, which reads only the
 // plaintext metadata of the encrypted wallet files and never attempts to
 // decrypt the private keys.
-func resolveWalletFrom(keystoreDir, from string) (name, address string, ok bool, err error) {
+func resolveWalletFrom(keystoreDir, from, flag string) (name, address string, ok bool, err error) {
 	in := strings.TrimSpace(from)
 	if in == "" {
-		return "", "", false, fmt.Errorf("--from must be provided (Tron base58 address or keystore wallet name)")
+		return "", "", false, fmt.Errorf("%s must be provided (Tron base58 address or keystore wallet name)", flag)
 	}
 	if looksLikeTronAddress(in) {
 		items, listErr := keystore.ListWallets(keystoreDir)
 		if listErr != nil {
-			return "", "", false, fmt.Errorf("resolve --from address: %w", listErr)
+			return "", "", false, fmt.Errorf("resolve %s address: %w", flag, listErr)
 		}
 		for _, w := range items {
 			if w.Address == in {
@@ -55,7 +57,7 @@ func resolveWalletFrom(keystoreDir, from string) (name, address string, ok bool,
 	}
 	items, listErr := keystore.ListWallets(keystoreDir)
 	if listErr != nil {
-		return "", "", false, fmt.Errorf("resolve --from wallet name: %w", listErr)
+		return "", "", false, fmt.Errorf("resolve %s wallet name: %w", flag, listErr)
 	}
 	for _, w := range items {
 		if w.Name == in {

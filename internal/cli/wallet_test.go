@@ -63,14 +63,14 @@ var _ = Describe("monujo wallet group", func() {
 		root.SetOut(&stdout)
 		root.SetErr(io.Discard)
 		root.SetIn(strings.NewReader("stash-passphrase-16+chars!!"))
-		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--from", "chk"})
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--addr", "chk"})
 
 		Expect(root.Execute()).To(Succeed())
 		Expect(stdout.String()).To(ContainSubstring("Passphrase matches"))
 		Expect(stdout.String()).To(ContainSubstring("chk"))
 	})
 
-	It("wallet check succeeds when --from is the base58 address", func() {
+	It("wallet check succeeds when --addr is the base58 address", func() {
 		dir := GinkgoT().TempDir()
 		addr := stashWallet(dir, "byaddr")
 
@@ -79,7 +79,7 @@ var _ = Describe("monujo wallet group", func() {
 		root.SetOut(&stdout)
 		root.SetErr(io.Discard)
 		root.SetIn(strings.NewReader("stash-passphrase-16+chars!!"))
-		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--from", addr})
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--addr", addr})
 
 		Expect(root.Execute()).To(Succeed())
 		Expect(stdout.String()).To(ContainSubstring(addr))
@@ -93,7 +93,7 @@ var _ = Describe("monujo wallet group", func() {
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
 		root.SetIn(strings.NewReader("wrong-passphrase-not-the-real-one!"))
-		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--from", "badpass"})
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--addr", "badpass"})
 
 		err := root.Execute()
 		Expect(err).To(HaveOccurred())

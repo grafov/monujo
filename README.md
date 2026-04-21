@@ -38,7 +38,7 @@ Requires Go 1.24+ (see `go.mod`).
 | `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).                                                                                                                                 |
 | `--output`                               | `table` or `json`.                                                                                                                                                                                |
 | `--http-url` / `--grpc-url`              | Override TronGrid HTTP base URL and gRPC `host:port`.                                                                                                                                             |
-| `--force`                                | On `hot balance`, `hot send-trx`, `hot send-usdt`, `hot activate` only: skip the interactive confirmation when `--network` differs from networks already recorded in the wallet file (see below). |
+| `--force`                                | On `hot balance`, `hot send-trx`, `hot send-usdt` only: skip the interactive confirmation when `--network` differs from networks already recorded in the wallet file (see below). |
 
 ## Watch-only (cold address, online PC)
 
@@ -81,20 +81,20 @@ A built-in passphrase generator is available as the standalone `monujo tool genp
 
 Each wallet file stores optional **`networks`** metadata: which Tron networks (`mainnet`, `shasta`) this wallet has already been used with. **`wallet create`** and **`wallet import`** record the current `--network`. After a successful **`hot send-trx`** or **`hot send-usdt`**, the current network is appended if missing.
 
-If you run **`hot balance`**, **`hot send-trx`**, **`hot send-usdt`**, or **`hot activate`** with a `--network` that is **not** in that list while the list is **non-empty**, the CLI prints the previously recorded networks and asks for confirmation before the passphrase prompt. In scripts or without a TTY, pass **`--force`** to acknowledge the mismatch, or run interactively and answer `y`/`yes`.
+If you run **`hot balance`**, **`hot send-trx`**, or **`hot send-usdt`** with a `--network` that is **not** in that list while the list is **non-empty**, the CLI prints the previously recorded networks and asks for confirmation before the passphrase prompt (or before balance lookup for `hot balance`). In scripts or without a TTY, pass **`--force`** to acknowledge the mismatch, or run interactively and answer `y`/`yes`.
 
-1. **Activate** a new address on-chain: Tron accounts become visible after the first incoming TRX. Send a small amount from an already-funded hot wallet (UX alias for `hot send-trx`):
+1. **First TRX to a new address** (Tron accounts become visible to read APIs after the first incoming TRX). Send a small amount from an already-funded hot wallet:
 
 ```bash
-./build/monujo hot activate --from funding --to <NEW_ADDR> --amount 1 --network shasta
+./build/monujo hot send-trx --from funding --to <NEW_ADDR> --amount 1 --network shasta
 ```
 
-(On testnet, you can use a [Shasta faucet](https://www.trongrid.io/faucet) instead of `activate` if you prefer.)
+(On testnet, you can use a [Shasta faucet](https://www.trongrid.io/faucet) instead.)
 
-2. **Balance** (no passphrase needed; address is read from the plaintext metadata of the wallet file, then the same public queries as `watch balance`):
+2. **Balance** (no passphrase needed; wallet name or any base58 address; for a named wallet the address is read from the plaintext metadata, then the same public queries as `watch balance`):
 
 ```bash
-./build/monujo hot balance --from myhot
+./build/monujo hot balance --addr myhot
 ```
 
 3. **Send TRX** (native, amount in sun/TRX decimals):
@@ -132,14 +132,14 @@ For cold-storage workflows the keystore can live exclusively on an **offline** m
 
 # Offline PC (keystore + private key live HERE only): sign the file
 ./build/monujo offline sign \
-    --in tx.unsigned.json --from cold --out tx.signed.json \
+    --in tx.unsigned.json --addr cold --out tx.signed.json \
     [--hmac-passphrase-env MONUJO_HMAC]
 
 # Online PC #2 (no keystore needed): broadcast
 ./build/monujo offline broadcast --in tx.signed.json
 ```
 
-`offline build --from` accepts either a Tron base58 address (T..., 34 chars) or, if a keystore is present on this online machine, a wallet name from it (no decryption). `offline sign --from` requires a wallet name (signing needs the private key, which is only addressable by name on the offline machine).
+`offline build --from` accepts either a Tron base58 address (T..., 34 chars) or, if a keystore is present on this online machine, a wallet name from it (no decryption). `offline sign --addr` accepts a keystore wallet name or a base58 address that maps to a local wallet (signing needs the private key).
 
 Both TRX (`--kind trx`) and USDT (`--kind usdt`) are supported. Tron's `ref_block` / `expiration` give a ~60 second window between `build` and `broadcast`; an expired file must be rebuilt online.
 
@@ -155,9 +155,9 @@ See [docs/10-offline-commands.md](docs/10-offline-commands.md) for a step-by-ste
 The CLI surface is still being shaped; while the major version is `0.x` we do hard renames without keeping deprecated aliases. Recent breaking changes:
 
 - `monujo hot list|create|import` are gone; they moved to `monujo wallet list|create|import`. The encrypted file format is unchanged — only the command names differ.
-- The sender flag is now uniformly `--from` across `hot balance`, `hot activate`, `hot send-trx`, `hot send-usdt`, `offline build` and `offline sign`. Old names `--name`, `--from-address`, `--from-name` no longer exist. On `offline build` the same `--from` accepts either a Tron base58 address or a keystore wallet name (auto-detected); on `offline sign` only a wallet name is accepted.
+- **`--addr`** names the subject for commands without a `--to` recipient on the CLI: `hot balance`, `wallet check`, and `offline sign`. **`--from` / `--to`** are used for transfers: `hot send-trx`, `hot send-usdt`, and `offline build`. Name vs base58 disambiguation is automatic (same heuristic as before).
 - `hot balance` no longer prompts for the keystore passphrase. The address is read from the plaintext metadata of the wallet file; integrity of the encrypted key is still verified the next time you sign anything.
-- `hot activate` is now documented as a UX alias for `hot send-trx`; behavior, fees and prompts are identical.
+- The separate `hot activate` command was removed; use `hot send-trx` for the same effect.
 
 ## License
 
