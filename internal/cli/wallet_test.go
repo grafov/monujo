@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/grafov/monujo/internal/app"
 	"github.com/grafov/monujo/internal/config"
@@ -50,7 +51,53 @@ var _ = Describe("monujo wallet group", func() {
 				}
 			}
 		}
-		Expect(found).To(ConsistOf("list", "create", "import"))
+		Expect(found).To(ConsistOf("list", "create", "import", "check"))
+	})
+
+	It("wallet check succeeds with correct passphrase (by wallet name)", func() {
+		dir := GinkgoT().TempDir()
+		stashWallet(dir, "chk")
+
+		root := newRootCmd()
+		var stdout bytes.Buffer
+		root.SetOut(&stdout)
+		root.SetErr(io.Discard)
+		root.SetIn(strings.NewReader("stash-passphrase-16+chars!!"))
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--from", "chk"})
+
+		Expect(root.Execute()).To(Succeed())
+		Expect(stdout.String()).To(ContainSubstring("Passphrase matches"))
+		Expect(stdout.String()).To(ContainSubstring("chk"))
+	})
+
+	It("wallet check succeeds when --from is the base58 address", func() {
+		dir := GinkgoT().TempDir()
+		addr := stashWallet(dir, "byaddr")
+
+		root := newRootCmd()
+		var stdout bytes.Buffer
+		root.SetOut(&stdout)
+		root.SetErr(io.Discard)
+		root.SetIn(strings.NewReader("stash-passphrase-16+chars!!"))
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--from", addr})
+
+		Expect(root.Execute()).To(Succeed())
+		Expect(stdout.String()).To(ContainSubstring(addr))
+	})
+
+	It("wallet check fails on wrong passphrase", func() {
+		dir := GinkgoT().TempDir()
+		stashWallet(dir, "badpass")
+
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetIn(strings.NewReader("wrong-passphrase-not-the-real-one!"))
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--from", "badpass"})
+
+		err := root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("decryption failed"))
 	})
 
 	It("wallet import without --key-hex and without env returns a clear error", func() {

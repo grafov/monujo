@@ -25,7 +25,7 @@ are stored, and which typical usage scenarios are supported.
 | [08 — Typical scenarios](08-scenarios.md)           | Step-by-step recipes: cold address checking, hot wallet creation, activation, sending USDT, testing on Shasta, scripted usage.                           |
 | [09 — Troubleshooting](09-troubleshooting.md)       | Decoding errors and ways to work around them.                                                                                                            |
 | [10 — `offline` commands](10-offline-commands.md)   | Air-gap scenario: `offline build` (online), `offline sign` (offline), `offline broadcast` (online); envelope format, HMAC, keystore isolation.           |
-| [11 — `wallet` commands](11-wallet-commands.md)     | Keystore file lifecycle: `wallet list`, `wallet create`, `wallet import`. These commands do not touch the network and work both online and on air-gap.   |
+| [11 — `wallet` commands](11-wallet-commands.md)     | Keystore file lifecycle: `wallet list`, `wallet create`, `wallet import`, `wallet check` (offline passphrase verification). These commands do not touch the network and work both online and on air-gap.   |
 
 ## Quick reference
 
@@ -41,6 +41,7 @@ make build                                    # binary at build/monujo
 ./build/monujo wallet list
 ./build/monujo wallet create --name myhot
 ./build/monujo wallet import --name imported --key-hex <64_HEX>
+./build/monujo wallet check --from myhot   # verify passphrase matches keystore (no network)
 
 # Network operations (passphrase required only for signing; balance needs none)
 #

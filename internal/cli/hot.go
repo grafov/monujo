@@ -116,8 +116,8 @@ a Tron base58 address directly. In the latter case no keystore file is
 required at all; the balance lookup is a read-only network operation.
 
 If you need to verify keystore integrity (i.e. that the encrypted key
-actually decrypts to the recorded address), perform any signing
-operation that loads the key, e.g. "hot send-trx".`,
+actually decrypts to the recorded address) without touching the
+network, use "wallet check --from ..." instead of a signing command.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {

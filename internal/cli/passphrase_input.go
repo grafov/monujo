@@ -1,12 +1,16 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"math"
+	"os"
 
 	"github.com/grafov/monujo/internal/keystore"
 	"github.com/grafov/monujo/internal/passphrase"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // readPassTwice prompts twice for a new keystore passphrase and returns the
@@ -36,6 +40,24 @@ var errPassMismatch = errPassMismatchType{}
 type errPassMismatchType struct{}
 
 func (errPassMismatchType) Error() string { return "passphrases do not match" }
+
+// readUnlockPassphrase prompts on stderr and reads the keystore passphrase.
+// On a TTY it delegates to [keystore.ReadPassphrase] (no echo). Otherwise it
+// reads from cmd.InOrStdin() so cobra tests with SetIn and shell pipes work.
+func readUnlockPassphrase(cmd *cobra.Command, prompt string) ([]byte, error) {
+	rawFd := os.Stdin.Fd()
+	if rawFd <= uintptr(math.MaxInt) && term.IsTerminal(int(rawFd)) {
+		return keystore.ReadPassphrase(prompt)
+	}
+	fmt.Fprint(cmd.ErrOrStderr(), prompt)
+	data, err := io.ReadAll(cmd.InOrStdin())
+	if err != nil {
+		return nil, err
+	}
+	data = bytes.TrimSuffix(data, []byte("\n"))
+	data = bytes.TrimSuffix(data, []byte("\r"))
+	return data, nil
+}
 
 // generateFlags bundles the --generate-* passphrase options shared by
 // `wallet create` and `wallet import`. When Enabled is false every other
