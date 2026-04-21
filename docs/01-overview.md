@@ -3,19 +3,22 @@
 ## Что такое monujo
 
 `monujo` — это инструмент командной строки на Go, ориентированный на
-работу с блокчейном **TRON** и токеном **USDT (TRC‑20)**. Он решает две
-независимые задачи:
+работу с блокчейном **TRON** и токеном **USDT (TRC‑20)**. Он решает
+четыре независимые задачи:
 
 1. **Watch‑only** — получение публичной информации (баланс TRX/USDT,
    история переводов TRC‑20) для произвольного адреса. Ключи не нужны,
    адрес может принадлежать кому угодно (в том числе холодному
    хранилищу). Используется только публичный HTTP API TronGrid.
-2. **Горячий кошелёк (hot)** — локальный зашифрованный keystore, в
-   котором хранится один или несколько секретных ключей secp256k1.
-   Программа умеет создавать новые ключи, импортировать существующие,
-   подписывать в процессе и рассылать транзакции через **gRPC** к
-   полному узлу Tron.
-3. **Air-gap (offline)** — три команды для классического сценария
+2. **Wallet (управление keystore)** — создание новых ключей, импорт
+   существующих и список локальных кошельков. Эти команды работают
+   только с файлами на диске и **не ходят в сеть**, поэтому одинаково
+   применимы и на онлайн-ПК, и на air‑gap‑машине.
+3. **Горячий кошелёк (hot)** — онлайн-операции: `hot balance` (без
+   пароля, адрес читается из метаданных файла), `hot send-trx`,
+   `hot send-usdt` и UX‑алиас `hot activate`. Подписание выполняется
+   в процессе, рассылка — через **gRPC** к полному узлу Tron.
+4. **Air-gap (offline)** — три команды для классического сценария
    с физической изоляцией ключа: `offline build` готовит на онлайн-ПК
    неподписанную транзакцию, `offline sign` на офлайн-ПК добавляет
    подпись из локального keystore, `offline broadcast` снова на
@@ -52,12 +55,16 @@ cmd/monujo/main.go            # точка входа, прокидывает в
 internal/cli/                 # парсинг команд и флагов (cobra)
   root.go                     # глобальные флаги и Execute()
   watch.go                    # подкоманды watch
-  hot.go                      # подкоманды hot
-  network_confirm.go          # интерактивное подтверждение --network
+  wallet.go                   # подкоманды wallet (lifecycle keystore, без сети)
+  hot.go                      # подкоманды hot (онлайн-операции)
+  offline.go                  # подкоманды offline (build/sign/broadcast)
+  passphrase_input.go         # readPassTwice + --generate-passphrase для wallet
+  network_confirm.go          # интерактивное подтверждение --network и --overwrite
 internal/config/config.go     # типы Network, OutputFormat и Config
 internal/app/                 # связывает CLI с доменом
   watch_service.go            # форматирует watch‑вывод (table/json)
   hot_service.go              # выполняет горячие операции
+  offline_service.go          # связывает keystore + envelope + write_client
 internal/keystore/            # шифрование/дешифрование, метаданные
   keystore.go                 # формат файла v2 (argon2id + AES‑GCM),
                               # legacy v1 (scrypt), автомиграция v1→v2
@@ -70,12 +77,10 @@ internal/tron/                # сетевые клиенты
   write_client.go             # gRPC к полному узлу + подписание
   address.go                  # ValidateBase58Address
   constants.go                # адреса USDT‑контрактов
-internal/transfer/             # JSON‑конверты для air-gap сценария
+  offline.go                  # build/sign/broadcast helpers вне keystore
+internal/transfer/            # JSON‑конверты для air-gap сценария
   envelope.go                 # типы UnsignedTransferPayload / SignedTransferPayload
   envelope_seal.go            # внешний конверт + scrypt-HMAC для целостности
-internal/tron/offline.go      # build/sign/broadcast helpers вне keystore
-internal/app/offline_service.go  # связывает keystore + envelope + write_client
-internal/cli/offline.go       # команды `offline build|sign|broadcast`
 ```
 
 ### Поток выполнения
@@ -92,26 +97,43 @@ internal/cli/offline.go       # команды `offline build|sign|broadcast`
    HTTP‑запросы к TronGrid и печатает результат в нужном формате
    (`table` или `json`).
 
+#### Команда `wallet ...`
+
+1. То же `Execute()` → `loadConfig()`.
+2. `wallet list` пробегает каталог keystore через `keystore.ListWallets()`
+   и печатает имена/адреса/записанные сети — никаких сетевых вызовов.
+3. `wallet create` / `wallet import` запрашивают парольную фразу (или
+   генерируют её через `--generate-passphrase`), вызывают
+   `keystore.GenerateAndStore()` / `keystore.Store()` и записывают
+   текущий `--network` в метаданные файла. Перед записью при наличии
+   уже существующего файла применяется `confirmWalletOverwrite()`.
+
 #### Команда `hot ...`
 
 1. То же `Execute()` → `loadConfig()`.
-2. Для команд, работающих с уже существующим ключом
-   (`balance`/`activate`/`send-trx`/`send-usdt`) сначала вызывается
+2. Для всех команд `hot` сначала вызывается
    `confirmWalletNetworkForOperation()`: считываются метаданные
    `networks` из файла кошелька и при несовпадении с `--network`
    запрашивается подтверждение в интерактивном режиме (или ошибка, если
    нет TTY и не передан `--force`).
-3. Запрашивается парольная фраза (без эха, через `golang.org/x/term`).
-4. `app.NewHotService(cfg).<Op>()`:
+3. `hot balance` адрес читает прямо из метаданных файла через
+   `keystore.ListWallets()` и **не запрашивает пароль**; затем зовёт
+   `WatchService.PrintBalance()`.
+4. `hot activate` / `hot send-trx` / `hot send-usdt` запрашивают
+   парольную фразу (без эха, через `golang.org/x/term`), затем:
    - `keystore.LoadPrivateKey()` расшифровывает keystore
      (argon2id → AES‑GCM для v2, либо scrypt → AES‑GCM для legacy v1
      с автомиграцией в v2), сверяет адрес.
-   - Для отправок строится транзакция через `tron.WriteClient`
-     (`gotron-sdk`), подписывается локально и рассылается через gRPC.
+   - Строится транзакция через `tron.WriteClient` (`gotron-sdk`),
+     подписывается локально и рассылается через gRPC.
    - При успешной отправке вызывается
      `keystore.EnsureNetworkRecorded()`, чтобы текущая сеть появилась в
      метаданных файла, если её там не было.
 5. Печатается результат (`table` или `json`).
+
+`hot activate` — UX-алиас на `hot send-trx` с тем же поведением,
+комиссиями и подтверждениями; команда выделена для читаемости
+скриптов и туториалов.
 
 ### Где живут данные
 

@@ -26,13 +26,19 @@ flowchart LR
 скомпрометировавший online-PC, сможет скопировать файл и пытаться
 подобрать пароль офлайн.
 
-- `offline build` принимает адрес отправителя через
-  `--from-address T...` (публичный base58-адрес). Если на online-машине
-  всё-таки лежит непустой keystore, можно использовать
-  `--from-name <wallet>`: команда зарезолвит адрес через
-  `keystore.ListWallets` без расшифровки.
+- `offline build` принимает отправителя через единый флаг `--from`.
+  Значение интерпретируется автоматически: если оно проходит
+  валидацию Tron base58-адреса (T..., 34 символа) — это публичный
+  адрес холодного кошелька; иначе — имя файла в keystore, и команда
+  резолвит адрес через `keystore.ListWallets` без расшифровки.
+  Обычно на онлайн-машине keystore'а нет вовсе, и используется
+  именно адрес.
 - `offline sign` — единственная команда, которой нужен `--keystore-dir`
-  и пароль keystore. Адрес из расшифрованного ключа сверяется с полем
+  и пароль keystore. Её `--from` принимает **только имя кошелька**
+  (base58-адрес отвергается явной ошибкой `offline sign --from
+  expects a keystore wallet name, not a base58 address`): подпись
+  требует приватного ключа, который на офлайн-ПК адресуется именно
+  по имени файла. Адрес из расшифрованного ключа сверяется с полем
   `from` в payload; при расхождении подпись не выполняется.
 - `offline broadcast` снова не требует keystore.
 
@@ -102,7 +108,7 @@ HMAC покрывает строго те байты, что лежат на д�
 ```bash
 # online PC #1 (без keystore)
 ./monujo offline build \
-    --from-address TMuA6YqfCeX8EhbfYEg5y7S4DqzSJireY9 \
+    --from TMuA6YqfCeX8EhbfYEg5y7S4DqzSJireY9 \
     --to T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb \
     --kind trx --amount 12.5 \
     --out tx.unsigned.json \
@@ -110,7 +116,7 @@ HMAC покрывает строго те байты, что лежат на д�
 
 # offline PC (есть keystore, есть приватный ключ)
 ./monujo offline sign \
-    --in tx.unsigned.json --name cold --out tx.signed.json \
+    --in tx.unsigned.json --from cold --out tx.signed.json \
     --hmac-passphrase-env MONUJO_HMAC
 # > вводите пароль keystore, читаете распарсенные поля, отвечаете y
 
@@ -131,7 +137,7 @@ USDT-десятичных. По умолчанию `fee_limit_sun` берётс�
 
 ```bash
 ./monujo offline build \
-    --from-address T...cold --to T...recipient \
+    --from T...cold --to T...recipient \
     --kind usdt --amount 25.50 \
     --out usdt.unsigned.json
 ```

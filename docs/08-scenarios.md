@@ -36,8 +36,8 @@ export MONUJO_TRONGRID_API_KEY="..."
 ## Сценарий 2. Создать новый горячий кошелёк и активировать его
 
 ```bash
-# 1. Создаём кошелёк (mainnet по умолчанию).
-./build/monujo hot create --name myhot
+# 1. Создаём кошелёк (mainnet по умолчанию). Команда `wallet` — без сети.
+./build/monujo wallet create --name myhot
 # New keystore passphrase: ******
 # Confirm passphrase: ******
 # Created wallet "myhot" -> TLcVUPa...
@@ -47,12 +47,13 @@ export MONUJO_TRONGRID_API_KEY="..."
 переложить кошелёк в другой инструмент):
 
 ```bash
-./build/monujo hot create --name myhot --export-private-key
+./build/monujo wallet create --name myhot --export-private-key
 # WARNING: printing private key is unsafe; ...
 # Private key (hex): 7b8a...
 ```
 
-Активация — в TRON аккаунт должен получить первую TRX:
+Активация — в TRON аккаунт должен получить первую TRX. Команда
+`hot activate` — это UX-алиас на `hot send-trx`:
 
 ```bash
 ./build/monujo hot activate \
@@ -67,7 +68,7 @@ export MONUJO_TRONGRID_API_KEY="..."
 ## Сценарий 3. Импорт существующего ключа
 
 ```bash
-./build/monujo hot import \
+./build/monujo wallet import \
   --name imported --key-hex 7b8a...c9d0
 # Парольная фраза дважды.
 ```
@@ -78,7 +79,7 @@ export MONUJO_TRONGRID_API_KEY="..."
 ```bash
 read -rs MONUJO_IMPORT_KEY    # ввод без эха
 export MONUJO_IMPORT_KEY
-./build/monujo hot import --name imported
+./build/monujo wallet import --name imported
 unset MONUJO_IMPORT_KEY
 history -d -1 -2              # удалить недавние строки истории (zsh/bash)
 ```
@@ -86,22 +87,22 @@ history -d -1 -2              # удалить недавние строки и�
 ## Сценарий 4. Проверить баланс именованного кошелька
 
 ```bash
-./build/monujo hot balance --name myhot
-# Passphrase: ******
+./build/monujo hot balance --from myhot
 # TRX: ...
 # USDT: ...
 ```
 
 В отличие от `watch balance` здесь не нужно помнить адрес — он
-извлекается из расшифрованного keystore. Минус — требуется парольная
-фраза (программа дешифрует ключ только чтобы убедиться в целостности
-файла, после чего сразу затирает его в памяти).
+читается из открытых метаданных файла keystore. Парольная фраза для
+этой команды **не требуется**: `hot balance` — read-only операция,
+дешифрование keystore выполняется только при подписи (`hot send-*`,
+`offline sign`).
 
 ## Сценарий 5. Отправить TRX
 
 ```bash
 ./build/monujo hot send-trx \
-  --name myhot --to TXYZ... --amount 12.5
+  --from myhot --to TXYZ... --amount 12.5
 # Passphrase: ...
 # Broadcast OK
 # Network: mainnet
@@ -112,14 +113,14 @@ history -d -1 -2              # удалить недавние строки и�
 баланс перед отправкой:
 
 ```bash
-./build/monujo hot balance --name myhot
+./build/monujo hot balance --from myhot
 ```
 
 ## Сценарий 6. Отправить USDT
 
 ```bash
 ./build/monujo hot send-usdt \
-  --name myhot --to TXYZ... --amount 10.25
+  --from myhot --to TXYZ... --amount 10.25
 ```
 
 Условия:
@@ -137,7 +138,7 @@ history -d -1 -2              # удалить недавние строки и�
 вручную):
 
 ```bash
-./build/monujo --network shasta hot create --name testhot
+./build/monujo --network shasta wallet create --name testhot
 # Адрес TLcVUPa...
 # Скопируйте его и запросите TRX на faucet через браузер.
 ```
@@ -145,20 +146,20 @@ history -d -1 -2              # удалить недавние строки и�
 Проверка после поступления:
 
 ```bash
-./build/monujo --network shasta hot balance --name testhot
+./build/monujo --network shasta hot balance --from testhot
 ```
 
 Отправка тестовых TRX/USDT:
 
 ```bash
 ./build/monujo --network shasta hot send-trx \
-  --name testhot --to TXYZ... --amount 1
+  --from testhot --to TXYZ... --amount 1
 
 ./build/monujo --network shasta hot send-usdt \
-  --name testhot --to TXYZ... --amount 1
+  --from testhot --to TXYZ... --amount 1
 ```
 
-При первом запуске `hot send-*` после `hot create` сеть совпадает
+При первом запуске `hot send-*` после `wallet create` сеть совпадает
 (в файле уже записан `shasta`), подтверждения не будет.
 
 ## Сценарий 8. Один и тот же кошелёк на mainnet и Shasta
@@ -170,11 +171,10 @@ history -d -1 -2              # удалить недавние строки и�
 При первой попытке использовать в новой сети:
 
 ```bash
-./build/monujo --network shasta hot balance --name myhot
+./build/monujo --network shasta hot balance --from myhot
 # Warning: wallet "myhot" was previously used on network(s): mainnet
 # The current operation uses network "shasta", which is not in that list.
 # Continue? [y/N]: y
-# Passphrase: ...
 # ...
 ```
 
@@ -204,16 +204,16 @@ set -euo pipefail
 
 printf '%s\n' "$MONUJO_PASS" | \
   ./build/monujo --output json --network shasta \
-    hot send-trx --name testhot --to TXYZ... --amount 1 --force \
+    hot send-trx --from testhot --to TXYZ... --amount 1 --force \
   | jq '.tx_id'
 ```
 
-> **Внимание**: программа дважды читает строку при `hot create` и
-> `hot import` (новая фраза + подтверждение). Подавайте её в STDIN
+> **Внимание**: программа дважды читает строку при `wallet create` и
+> `wallet import` (новая фраза + подтверждение). Подавайте её в STDIN
 > два раза подряд:
 > ```bash
 > printf '%s\n%s\n' "$MONUJO_PASS" "$MONUJO_PASS" | \
->   ./build/monujo hot create --name myhot
+>   ./build/monujo wallet create --name myhot
 > ```
 
 ## Сценарий 10. Перенос keystore между машинами
@@ -233,13 +233,13 @@ printf '%s\n' "$MONUJO_PASS" | \
 ## Сценарий 11. Список всех кошельков на машине
 
 ```bash
-./build/monujo hot list
+./build/monujo wallet list
 ```
 
 Машинно:
 
 ```bash
-./build/monujo --output json hot list \
+./build/monujo --output json wallet list \
   | jq '.wallets[] | {name, address, networks}'
 ```
 

@@ -73,14 +73,14 @@ var _ = Describe("confirmWalletNetworkForOperation", func() {
 	})
 })
 
-var _ = Describe("confirmHotWalletOverwrite", func() {
+var _ = Describe("confirmWalletOverwrite", func() {
 	It("passes when wallet does not exist", func() {
 		dir := GinkgoT().TempDir()
 		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", dir)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(confirmHotWalletOverwrite(cfg, "absent", false)).To(Succeed())
-		Expect(confirmHotWalletOverwrite(cfg, "absent", true)).To(Succeed())
+		Expect(confirmWalletOverwrite(cfg, "absent", false)).To(Succeed())
+		Expect(confirmWalletOverwrite(cfg, "absent", true)).To(Succeed())
 	})
 
 	It("errors when wallet exists and --overwrite is not set", func() {
@@ -98,7 +98,7 @@ var _ = Describe("confirmHotWalletOverwrite", func() {
 		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", dir)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = confirmHotWalletOverwrite(cfg, "present", false)
+		err = confirmWalletOverwrite(cfg, "present", false)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("already exists"))
 		Expect(err.Error()).To(ContainSubstring("--overwrite"))
@@ -123,6 +123,6 @@ var _ = Describe("confirmHotWalletOverwrite", func() {
 		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", dir)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(confirmHotWalletOverwrite(cfg, "present", true)).To(Succeed())
+		Expect(confirmWalletOverwrite(cfg, "present", true)).To(Succeed())
 	})
 })

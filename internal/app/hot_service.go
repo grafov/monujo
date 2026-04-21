@@ -119,20 +119,37 @@ func (h *HotService) ListWallets() error {
 	return nil
 }
 
-// ActivateAccount sends the first TRX to a new address so the account exists on-chain (same as send-trx).
+// ActivateAccount is a UX alias for [HotService.SendTRX]: sending the first
+// TRX to a new address makes the account visible to read APIs (which is
+// what users colloquially call "activating" the address). The behavior,
+// fees and confirmation prompts are identical to SendTRX; only the
+// command name in the CLI differs for readability.
 func (h *HotService) ActivateAccount(ctx context.Context, fromName, to string, amountTRX string, pass []byte) error {
 	return h.SendTRX(ctx, fromName, to, amountTRX, pass)
 }
 
-// PrintBalance shows TRX/USDT for a named hot wallet (address from key).
-func (h *HotService) PrintBalance(ctx context.Context, name string, pass []byte) error {
-	pk, err := keystore.LoadPrivateKey(h.ks, name, pass)
+// PrintBalanceByName shows TRX/USDT for a named hot wallet without
+// requiring the keystore passphrase. The address is read from the
+// plaintext metadata of the encrypted wallet file (the same field that
+// `wallet list` exposes), then forwarded to [WatchService.PrintBalance].
+//
+// Decrypting the key for a balance lookup would prove file integrity but
+// would also force the user to type their passphrase for a read-only
+// operation; that trade-off is not worth it. Any subsequent signing
+// operation (e.g. SendTRX) will still verify integrity end-to-end via
+// [keystore.LoadPrivateKey].
+func (h *HotService) PrintBalanceByName(ctx context.Context, name string) error {
+	items, err := keystore.ListWallets(h.ks)
 	if err != nil {
 		return err
 	}
-	defer pk.Wipe()
-	w := NewWatchService(h.cfg)
-	return w.PrintBalance(ctx, pk.Address)
+	for _, w := range items {
+		if w.Name == name {
+			ws := NewWatchService(h.cfg)
+			return ws.PrintBalance(ctx, w.Address)
+		}
+	}
+	return fmt.Errorf("wallet %q not found in keystore %q", name, h.ks)
 }
 
 // SendTRX sends TRX from named wallet.

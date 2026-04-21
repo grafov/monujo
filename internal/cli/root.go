@@ -51,6 +51,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&keystoreDirFlag, "keystore-dir", "", "Keystore directory (default: ~/.config/monujo/keystore)")
 
 	root.AddCommand(newWatchCmd())
+	root.AddCommand(newWalletCmd())
 	root.AddCommand(newHotCmd())
 	root.AddCommand(newOfflineCmd())
 	root.AddCommand(newToolCmd())

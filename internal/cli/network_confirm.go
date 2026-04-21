@@ -55,8 +55,8 @@ func confirmWalletNetworkForOperation(cfg *config.Config, walletName string, for
 	return fmt.Errorf("aborted")
 }
 
-// confirmHotWalletOverwrite enforces the overwrite policy for `hot create` and
-// `hot import`:
+// confirmWalletOverwrite enforces the overwrite policy for `wallet create`
+// and `wallet import`:
 //
 //   - If no wallet file exists for walletName, returns nil.
 //   - If the wallet file exists and overwrite is false, returns an error
@@ -65,7 +65,7 @@ func confirmWalletNetworkForOperation(cfg *config.Config, walletName string, for
 //     prompted for interactive [y/N] confirmation; on a non-TTY stdin the
 //     operation proceeds without additional confirmation (the explicit
 //     --overwrite flag is treated as the confirmation in scripts).
-func confirmHotWalletOverwrite(cfg *config.Config, walletName string, overwrite bool) error {
+func confirmWalletOverwrite(cfg *config.Config, walletName string, overwrite bool) error {
 	exists, err := keystore.WalletExists(cfg.KeystoreDir, walletName)
 	if err != nil {
 		return err

@@ -17,7 +17,7 @@
 
 ### `provide --key-hex or set MONUJO_IMPORT_KEY with the hex private key`
 
-Команда `hot import` без ключа. Передайте `--key-hex` или экспортируйте
+Команда `wallet import` без ключа. Передайте `--key-hex` или экспортируйте
 переменную `MONUJO_IMPORT_KEY`.
 
 ### `private key must be 64 hex characters`
@@ -45,13 +45,14 @@ hex‑представление.
 
 ### `passphrases do not match`
 
-При `hot create`/`hot import` две введённые фразы различны.
+При `wallet create`/`wallet import` две введённые фразы различны.
 Запустите команду заново.
 
 ### `decryption failed (wrong passphrase or corrupt file)`
 
-При попытке использовать существующий keystore (`hot balance`,
-`hot send-*`, `hot activate`):
+При попытке использовать существующий keystore (`hot send-*`,
+`hot activate`, `offline sign`; `hot balance` пароля не запрашивает
+и эту ошибку не показывает):
 
 - Скорее всего, пароль введён неправильно. Регистр важен.
 - Возможно, файл повреждён (проверьте `cat ~/.config/monujo/keystore/<имя>.json`
@@ -201,8 +202,10 @@ v1 (legacy scrypt) и v2 (argon2id), v1 мигрируется в v2 при пе
 Информационное сообщение в stderr (не ошибка): ваш старый v1 файл
 успешно мигрирован в v2. Рядом появился бэкап `<имя>.scrypt.bak`.
 Его можно удалить после того, как вы один раз убедитесь в
-работоспособности v2 файла (например, запустив `hot list` и
-`hot balance`).
+работоспособности v2 файла, выполнив подписывающую операцию
+(`hot send-trx --from <имя>` с минимальной суммой на тестовый адрес,
+или `offline sign`). `wallet list` и `hot balance` показывают только
+открытые метаданные и валидности шифротекста не подтверждают.
 
 ### `warning: failed to migrate wallet "..." to argon2id: ...`
 
@@ -260,7 +263,7 @@ monujo без поддержки argon2id):
 для выбранной сети. Нет ключа `--contract-address` в текущей
 версии.
 
-### «`hot list` пустой, хотя файлы есть»
+### «`wallet list` пустой, хотя файлы есть»
 
 Проверьте:
 

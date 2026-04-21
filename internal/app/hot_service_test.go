@@ -37,4 +37,15 @@ var _ = Describe("HotService", func() {
 		err = svc.ActivateAccount(context.Background(), "missing", "TInvalid", "1", []byte("x"))
 		Expect(err).To(HaveOccurred())
 	})
+
+	It("PrintBalanceByName errors for unknown wallet without asking for passphrase", func() {
+		dir := GinkgoT().TempDir()
+		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", dir)
+		Expect(err).NotTo(HaveOccurred())
+
+		svc := NewHotService(cfg)
+		err = svc.PrintBalanceByName(context.Background(), "no-such-wallet")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not found"))
+	})
 })

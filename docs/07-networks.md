@@ -108,7 +108,7 @@ API‑ключ передаётся в заголовке `TRON-PRO-API-KEY`. Е
 
 ```bash
 monujo --grpc-url my-tron-grpc.example.com:50051 \
-       hot send-trx --name myhot --to T... --amount 1
+       hot send-trx --from myhot --to T... --amount 1
 ```
 
 Подключение **без TLS** (через `insecure.NewCredentials()` в
@@ -138,7 +138,7 @@ monujo --api-key "<ключ>" watch balance --addr T...
 
 ## Что записывается в метаданные кошелька
 
-При запуске `hot create`, `hot import`, успешной отправке `hot send-trx`
+При запуске `wallet create`, `wallet import`, успешной отправке `hot send-trx`
 или `hot send-usdt` текущий `--network` сохраняется в
 `EncryptedWalletFile.networks`. Это нужно, чтобы при последующем
 запуске с другим `--network` пользователь увидел предупреждение и

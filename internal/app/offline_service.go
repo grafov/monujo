@@ -104,13 +104,14 @@ type BuildOptions struct {
 }
 
 // resolveFromAddress applies opts.FromAddress vs FromName precedence and
-// validates the result.
+// validates the result. Both fields are filled by the CLI layer from the
+// single --from flag; FromAddress wins when both happen to be set.
 func (o *OfflineService) resolveFromAddress(opts BuildOptions) (string, error) {
 	addr := strings.TrimSpace(opts.FromAddress)
 	if addr == "" && opts.FromName != "" {
 		items, err := keystore.ListWallets(o.ks)
 		if err != nil {
-			return "", fmt.Errorf("resolve --from-name: %w", err)
+			return "", fmt.Errorf("resolve --from wallet name: %w", err)
 		}
 		for _, w := range items {
 			if w.Name == opts.FromName {
@@ -123,7 +124,7 @@ func (o *OfflineService) resolveFromAddress(opts BuildOptions) (string, error) {
 		}
 	}
 	if addr == "" {
-		return "", errors.New("either --from-address or --from-name must be provided")
+		return "", errors.New("--from must be provided (Tron base58 address or keystore wallet name)")
 	}
 	if err := tron.ValidateBase58Address(addr); err != nil {
 		return "", err
