@@ -54,6 +54,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newWalletCmd())
 	root.AddCommand(newHotCmd())
 	root.AddCommand(newOfflineCmd())
+	root.AddCommand(newMultisigCmd())
 	root.AddCommand(newToolCmd())
 	return root
 }

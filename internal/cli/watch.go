@@ -14,7 +14,33 @@ func newWatchCmd() *cobra.Command {
 	}
 	w.AddCommand(newWatchBalanceCmd())
 	w.AddCommand(newWatchTxsCmd())
+	w.AddCommand(newWatchPermissionsCmd())
 	return w
+}
+
+func newWatchPermissionsCmd() *cobra.Command {
+	var addr string
+	cmd := &cobra.Command{
+		Use:   "permissions",
+		Short: "Show owner/witness/active permissions for a Tron account",
+		Long: `Read the owner, witness and active permissions for a Tron account
+via the TronGrid HTTP API. Each permission is printed with its id, name,
+threshold, allowed contract types (operations bitmap decoded by name),
+and weighted keys. Keys whose address matches a local keystore wallet are
+annotated with "[local: <wallet-name>]" so you can tell which signatures
+you can contribute yourself.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			svc := app.NewWatchService(cfg)
+			return svc.PrintPermissions(context.Background(), addr)
+		},
+	}
+	cmd.Flags().StringVar(&addr, "addr", "", "Tron base58 address")
+	_ = cmd.MarkFlagRequired("addr")
+	return cmd
 }
 
 func newWatchBalanceCmd() *cobra.Command {

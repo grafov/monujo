@@ -20,6 +20,9 @@ const (
 	KindUnsignedTransfer = "unsigned_transfer"
 	// KindSignedTransfer wraps a [SignedTransferPayload].
 	KindSignedTransfer = "signed_transfer"
+	// KindMultisigTransfer wraps a [MultisigTransferPayload] (a partially or
+	// fully signed multi-signature Tron transaction).
+	KindMultisigTransfer = "multisig_transfer"
 )
 
 const (
@@ -184,7 +187,7 @@ var ErrHMACMismatch = errors.New("envelope hmac mismatch (file tampered or wrong
 
 func validKind(k string) bool {
 	switch k {
-	case KindUnsignedTransfer, KindSignedTransfer:
+	case KindUnsignedTransfer, KindSignedTransfer, KindMultisigTransfer:
 		return true
 	default:
 		return false

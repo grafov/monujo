@@ -272,6 +272,23 @@ type RawDataSummary struct {
 	TimestampMs  int64
 }
 
+// DecodeRawDataPermissionID parses rawDataHex and returns the Permission_id
+// of the first contract. Non-decodable input or missing contract yields 0
+// (Tron's default permission id). This is used by the multisig CLI so it
+// can classify a transaction by its target permission without needing the
+// higher-level raw_data summary.
+func DecodeRawDataPermissionID(rawDataHex string) int32 {
+	raw, err := decodeRawDataHex(rawDataHex)
+	if err != nil {
+		return 0
+	}
+	contracts := raw.GetContract()
+	if len(contracts) == 0 {
+		return 0
+	}
+	return contracts[0].GetPermissionId()
+}
+
 // DecodeRawDataSummary parses rawDataHex and extracts the kind/from/to/amount
 // fields from the first contract. Supports TRX TransferContract and
 // TRC-20 transfer(address,uint256) via TriggerSmartContract; other contract

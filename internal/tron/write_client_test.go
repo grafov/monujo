@@ -40,11 +40,12 @@ const (
 // recordedCalls captures gRPC calls observed by the in-process WalletServer
 // fake so that black-box specs can assert on them without leaking impl details.
 type recordedCalls struct {
-	mu             sync.Mutex
-	createTxCalls  []*core.TransferContract
-	triggerCalls   []*core.TriggerSmartContract
-	broadcastCalls []*core.Transaction
-	feeLimitsSeen  []int64
+	mu              sync.Mutex
+	createTxCalls   []*core.TransferContract
+	triggerCalls    []*core.TriggerSmartContract
+	broadcastCalls  []*core.Transaction
+	signWeightCalls []*core.Transaction
+	feeLimitsSeen   []int64
 }
 
 func (r *recordedCalls) recordCreate(c *core.TransferContract) {
@@ -66,6 +67,12 @@ func (r *recordedCalls) recordBroadcast(tx *core.Transaction, fee int64) {
 	r.feeLimitsSeen = append(r.feeLimitsSeen, fee)
 }
 
+func (r *recordedCalls) recordSignWeight(tx *core.Transaction) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.signWeightCalls = append(r.signWeightCalls, tx)
+}
+
 // mockWallet is a configurable api.WalletServer fake. Each test installs only
 // the handlers it needs by setting the *Func fields; the rest fall through to
 // the embedded UnimplementedWalletServer (which returns codes.Unimplemented).
@@ -74,9 +81,10 @@ type mockWallet struct {
 
 	calls *recordedCalls
 
-	createTx2 func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
-	trigger   func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
-	broadcast func(context.Context, *core.Transaction) (*api.Return, error)
+	createTx2      func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
+	trigger        func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	broadcast      func(context.Context, *core.Transaction) (*api.Return, error)
+	getSignWeight  func(context.Context, *core.Transaction) (*api.TransactionSignWeight, error)
 }
 
 func (m *mockWallet) CreateTransaction2(ctx context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
@@ -105,6 +113,14 @@ func (m *mockWallet) BroadcastTransaction(ctx context.Context, in *core.Transact
 		return nil, errors.New("mockWallet: BroadcastTransaction not configured")
 	}
 	return m.broadcast(ctx, in)
+}
+
+func (m *mockWallet) GetTransactionSignWeight(ctx context.Context, in *core.Transaction) (*api.TransactionSignWeight, error) {
+	m.calls.recordSignWeight(in)
+	if m.getSignWeight == nil {
+		return nil, errors.New("mockWallet: GetTransactionSignWeight not configured")
+	}
+	return m.getSignWeight(ctx, in)
 }
 
 // startBufconn spins up an in-process gRPC server bound to a bufconn listener

@@ -39,6 +39,13 @@ const (
 	KindTRX = "trx"
 	// KindTRC20USDT is a TRC-20 USDT transfer (transfer(address,uint256)).
 	KindTRC20USDT = "trc20_usdt"
+	// KindUnknownContract is used inside a [MultisigTransferPayload] when the
+	// wrapped Tron raw_data contains a contract type that monujo cannot fully
+	// decode for visual confirmation (anything beyond TRX TransferContract and
+	// TRC-20 transfer(address,uint256)). The envelope is still accepted so the
+	// user can forward the partially-signed transaction to another signer,
+	// but the CLI prints a warning and omits the To/Amount/Contract fields.
+	KindUnknownContract = "unknown_contract"
 )
 
 // UnsignedTransferPayload is the offline-signer input: enough to recompute,
@@ -84,6 +91,79 @@ type SignedTransferPayload struct {
 	TxIDHex      string  `json:"tx_id_hex"`
 	RawDataHex   string  `json:"raw_data_hex"`
 	SignatureHex string  `json:"signature_hex"`
+}
+
+// MultisigTransferPayload is the envelope for cooperative multi-signature
+// signing. Monujo does not create multisig transactions; it only participates
+// as a co-signer of a transaction produced elsewhere (TronWeb, TronLink,
+// TronScan, java-tron CLI). Each pass through "monujo multisig cosign"
+// appends one signature to [SignaturesHex] until the permission's weight
+// threshold is satisfied.
+//
+// The authoritative bytes are [RawDataHex]; human-readable fields are copied
+// alongside for visual confirmation and MUST be recomputed from raw_data by
+// the signer/broadcaster (see [tron.DecodeRawDataSummary]). For contract
+// types we cannot decode (Kind == [KindUnknownContract]) only RawDataHex,
+// PermissionID, Expiration, Timestamp and TxIDHex are authoritative; the
+// display fields are left empty.
+type MultisigTransferPayload struct {
+	Version       int      `json:"version"`
+	Chain         ChainID  `json:"chain"`
+	Kind          string   `json:"kind"`
+	PermissionID  int32    `json:"permission_id"`
+	From          string   `json:"from"`
+	To            string   `json:"to,omitempty"`
+	Amount        string   `json:"amount,omitempty"`
+	AmountMinimal string   `json:"amount_minimal,omitempty"`
+	Contract      string   `json:"contract,omitempty"`
+	FeeLimitSun   int64    `json:"fee_limit_sun,omitempty"`
+	RawDataHex    string   `json:"raw_data_hex"`
+	Expiration    int64    `json:"expiration_unix_ms"`
+	Timestamp     int64    `json:"timestamp_unix_ms"`
+	TxIDHex       string   `json:"tx_id_hex"`
+	SignaturesHex []string `json:"signatures_hex,omitempty"`
+	Note          string   `json:"note,omitempty"`
+}
+
+// MarshalMultisigPayload serializes a multisig payload to canonical JSON and
+// validates required fields. Display fields (To/Amount/Contract) are
+// optional because a [KindUnknownContract] payload does not carry them.
+func MarshalMultisigPayload(m MultisigTransferPayload) ([]byte, error) {
+	if m.Version == 0 {
+		m.Version = EnvelopeVersion
+	}
+	if m.Version != EnvelopeVersion {
+		return nil, fmt.Errorf("unsupported payload version %d", m.Version)
+	}
+	if m.Kind == "" || m.From == "" || m.RawDataHex == "" || m.TxIDHex == "" {
+		return nil, fmt.Errorf("multisig transfer: missing required fields")
+	}
+	switch m.Kind {
+	case KindTRX, KindTRC20USDT:
+		if m.To == "" || m.Amount == "" || m.AmountMinimal == "" {
+			return nil, fmt.Errorf("multisig transfer: kind %q requires to/amount/amount_minimal", m.Kind)
+		}
+		if m.Kind == KindTRC20USDT && m.Contract == "" {
+			return nil, fmt.Errorf("multisig transfer: trc20 requires contract")
+		}
+	case KindUnknownContract:
+	default:
+		return nil, fmt.Errorf("multisig transfer: unknown kind %q", m.Kind)
+	}
+	return json.Marshal(m)
+}
+
+// UnmarshalMultisigPayload parses canonical JSON into a
+// [MultisigTransferPayload] and verifies the envelope version.
+func UnmarshalMultisigPayload(b []byte) (MultisigTransferPayload, error) {
+	var m MultisigTransferPayload
+	if err := json.Unmarshal(b, &m); err != nil {
+		return m, err
+	}
+	if m.Version != EnvelopeVersion {
+		return m, fmt.Errorf("unsupported payload version %d", m.Version)
+	}
+	return m, nil
 }
 
 // MarshalUnsignedPayload serializes an unsigned payload to canonical JSON

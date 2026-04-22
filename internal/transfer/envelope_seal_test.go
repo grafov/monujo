@@ -44,6 +44,29 @@ var _ = Describe("sealed envelope operations", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("round-trips multisig payload without HMAC", func() {
+		payload := []byte(`{"hello":"multisig"}`)
+		blob, err := SealPayload(KindMultisigTransfer, payload, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		got, _, err := OpenEnvelope(blob, KindMultisigTransfer, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(Equal(payload))
+	})
+
+	It("round-trips multisig payload with HMAC", func() {
+		key, err := DeriveHMACKey([]byte("multisig-passphrase"))
+		Expect(err).NotTo(HaveOccurred())
+
+		payload := []byte(`{"k":"v"}`)
+		blob, err := SealPayload(KindMultisigTransfer, payload, key)
+		Expect(err).NotTo(HaveOccurred())
+
+		got, _, err := OpenEnvelope(blob, KindMultisigTransfer, key)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(Equal(payload))
+	})
+
 	It("rejects tampered payload when HMAC is present", func() {
 		key, err := DeriveHMACKey([]byte("p1"))
 		Expect(err).NotTo(HaveOccurred())

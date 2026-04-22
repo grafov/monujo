@@ -10,6 +10,7 @@ Monujo is a minimal **Go CLI** tool for **Tron blockchain** and **USDT (TRC-20)*
 - **Wallet lifecycle**: Create or import wallet files in a local encrypted keystore (no network required)
 - **Hot wallet**: Online sending of TRX and USDT with interactive confirmation, using a wallet from the keystore
 - **Offline signing**: Air-gapped workflow for maximum security with `build | sign | broadcast` commands
+- **Multisig participation**: Cosign and broadcast Tron multisig transactions built by external coordinators (`multisig cosign | info | broadcast`); inspect permissions with `watch permissions`
 - **Multi-network support**: Works with both mainnet and Shasta testnet
 - **Secure storage**: Encrypted keystore using Argon2id + AES-256-GCM with automatic migration from legacy formats
 - **Key management**: Create new wallets or import existing private keys with passphrase protection
@@ -149,6 +150,29 @@ Two layers protect the file in transit:
 - **Optional HMAC-SHA256.** Pass `--hmac-passphrase` (or `--hmac-passphrase-env`) on both ends; the key is derived via scrypt and the envelope is rejected on mismatch.
 
 See [docs/10-offline-commands.md](docs/10-offline-commands.md) for a step-by-step walk-through and the on-disk envelope format.
+
+## Multisig
+
+Tron supports multisig natively (see `owner`/`witness`/`active` permissions with weighted keys and a `threshold`). The `monujo multisig` group lets a wallet **participate** in a multisig transaction assembled by an external coordinator (TronWeb/TronLink/TronScan/java-tron CLI): it does not propose new multisig transactions and does not configure permissions.
+
+```bash
+# cosigner #1 (offline): append a signature to the incoming file
+./build/monujo multisig cosign \
+    --in tx.json --out tx.cosigned.json \
+    --addr alice \
+    [--format auto|tron-json|monujo] [--out-format ...] \
+    [--hmac-passphrase-env MONUJO_HMAC]
+
+# anyone (online, read-only): inspect the current sign weight
+./build/monujo multisig info --in tx.cosigned.json
+
+# last cosigner (online): broadcast when weight >= threshold
+./build/monujo multisig broadcast --in tx.cosigned.json --yes
+```
+
+Both canonical Tron JSON (the format produced by `tronWeb.trx.multiSign` and the HTTP API) and the `monujo` sealed envelope (for air-gapped transit between cosigners) are accepted. Use `monujo watch permissions --addr T...` to print the permission structure of the account, with local keystore wallets highlighted so you can tell which signatures you can contribute yourself.
+
+See [docs/13-multisig.md](docs/13-multisig.md) for the full flow, format details and non-goals.
 
 ## Breaking changes (v0.x)
 

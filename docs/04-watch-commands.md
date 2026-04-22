@@ -10,8 +10,9 @@
 
 ```text
 monujo watch
-├── balance   — TRX и USDT для адреса
-└── txs       — последние переводы USDT (TRC-20)
+├── balance      — TRX и USDT для адреса
+├── txs          — последние переводы USDT (TRC-20)
+└── permissions  — owner/witness/active permissions (multisig-структура)
 ```
 
 Глобальные флаги (`--network`, `--output`, `--http-url`, `--api-key`,
@@ -205,3 +206,77 @@ $ monujo watch txs --addr TXYZ... --limit 3
   200 последних подтверждённых записей. Для глубокой истории нужны
   собственные средства (например, прямые вызовы TronGrid с
   `fingerprint` из ответа).
+
+---
+
+## `watch permissions`
+
+Показывает multisig-структуру аккаунта: `owner_permission` (id=0),
+опциональный `witness_permission` (id=1) и все `active_permission`
+(id=2..9). Для каждой permission печатается id, имя, threshold, список
+разрешённых контрактных типов (operations bitmap декодируется через
+`core.Transaction_Contract_ContractType_name`) и список подписантов
+`keys: {address, weight}`.
+
+Если адрес ключа совпадает с адресом любого локального
+кошелька из `--keystore-dir`, он помечается `[local: <wallet-name>]` —
+так видно, какие из требуемых подписей можно дать своими кошельками.
+
+### Использование
+
+```bash
+monujo watch permissions --addr <TRON_BASE58_ADDRESS>
+```
+
+### Флаги
+
+| Флаг     | Тип    | Обязательный | По умолчанию | Описание                                                     |
+|----------|--------|--------------|--------------|--------------------------------------------------------------|
+| `--addr` | string | да           | —            | Tron base58-адрес. Валидируется локально до HTTP-запроса.    |
+
+Глобальный `--keystore-dir` используется только для резолвинга
+локальных кошельков; сам keystore не расшифровывается.
+
+### Пример: формат `table`
+
+```text
+$ monujo watch permissions --addr TXYZ...
+permission owner  id=0  threshold=2
+  keys:
+    TAAA...  weight=1  [local: alice]
+    TBBB...  weight=1
+permission active0  id=2  threshold=2
+  operations: TransferContract, TriggerSmartContract
+  keys:
+    TAAA...  weight=1  [local: alice]
+    TCCC...  weight=1  [local: bob]
+```
+
+### Пример: формат `json`
+
+```json
+{
+  "address": "TXYZ...",
+  "owner": {
+    "type": "owner",
+    "id": 0,
+    "permission_name": "owner",
+    "threshold": 2,
+    "keys": [
+      {"address": "TAAA...", "weight": 1, "local_wallet": "alice"},
+      {"address": "TBBB...", "weight": 1}
+    ]
+  },
+  "active": [ ... ]
+}
+```
+
+### Возможные ошибки
+
+- `invalid Tron address: ...` — некорректный адрес.
+- `trongrid permissions: HTTP 4xx: ...` — ошибка вызова TronGrid.
+- Пустой `permissions` (все поля `null`) — адрес ещё не активирован в
+  сети или у него нет собственных permissions (что равнозначно
+  дефолтной 1-of-1 схеме).
+
+См. также [13. Команды `multisig`](13-multisig.md).
