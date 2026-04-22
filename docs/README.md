@@ -26,6 +26,7 @@ are stored, and which typical usage scenarios are supported.
 | [09 — Troubleshooting](09-troubleshooting.md)       | Decoding errors and ways to work around them.                                                                                                            |
 | [10 — `offline` commands](10-offline-commands.md)   | Air-gap scenario: `offline build` (online), `offline sign` (offline), `offline broadcast` (online); envelope format, HMAC, keystore isolation.           |
 | [11 — `wallet` commands](11-wallet-commands.md)     | Keystore file lifecycle: `wallet list`, `wallet create`, `wallet import`, `wallet check` (offline passphrase verification). These commands do not touch the network and work both online and on air-gap.   |
+| [12 — Network activity and security](12-network-security.md) | Which subcommands call TronGrid HTTPS vs Tron gRPC, default hosts and paths/RPC names, API key, overrides, and channel security notes. |
 
 ## Quick reference
 
