@@ -2,11 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/grafov/monujo/internal/app"
 	"github.com/grafov/monujo/internal/config"
 	"github.com/grafov/monujo/internal/keystore"
@@ -15,6 +17,54 @@ import (
 )
 
 var _ = Describe("monujo wallet group", func() {
+	const addressLikeName = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+
+	It("wallet create rejects --name that looks like a Tron address before passphrase", func() {
+		dir := GinkgoT().TempDir()
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "create", "--name", addressLikeName})
+
+		err := root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("looks like a Tron base58 address"))
+	})
+
+	It("wallet import rejects --name that looks like a Tron address before passphrase", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
+		keyHex := hex.EncodeToString(crypto.FromECDSA(priv))
+
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "import", "--name", addressLikeName, "--key-hex", keyHex})
+
+		err = root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("looks like a Tron base58 address"))
+	})
+
+	It("wallet import-external rejects --name that looks like a Tron address before writing keystore", func() {
+		dir := GinkgoT().TempDir()
+		const extAddr = "TMuA6YqfCeX8EhbfYEg5y7S4DqzSJireY9"
+
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "import-external", "--name", addressLikeName, "--addr", extAddr})
+
+		err := root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("looks like a Tron base58 address"))
+
+		items, err := keystore.ListWallets(dir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(items).To(BeEmpty())
+	})
+
 	It("creates a wallet via app.HotService and lists it back", func() {
 		// Drive the same service entry points the `wallet create` and
 		// `wallet list` cobra commands use, against a fresh temp keystore.

@@ -12,6 +12,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// rejectAddressLikeWalletName returns an error if name would later be
+// misclassified as a Tron base58 address by looksLikeTronAddress (used by
+// --from/--to/--addr resolution). Empty input is left to cobra MarkFlagRequired.
+func rejectAddressLikeWalletName(name string) error {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return nil
+	}
+	if looksLikeTronAddress(trimmed) {
+		return fmt.Errorf("wallet name %q looks like a Tron base58 address; choose a non-address name to avoid --addr/--from/--to ambiguity", trimmed)
+	}
+	return nil
+}
+
 // newWalletCmd registers the `wallet` group: lifecycle operations on the
 // local encrypted keystore (no network access, no online RPCs). The
 // network-bound counterparts live under `hot` and `offline`.
@@ -116,6 +130,9 @@ func newWalletCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := rejectAddressLikeWalletName(name); err != nil {
+				return err
+			}
 			if err := confirmWalletOverwrite(cfg, name, overwrite); err != nil {
 				return err
 			}
@@ -149,6 +166,9 @@ func newWalletImportCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
+				return err
+			}
+			if err := rejectAddressLikeWalletName(name); err != nil {
 				return err
 			}
 			key := strings.TrimSpace(keyHex)
@@ -194,6 +214,9 @@ wallet check) require a local encrypted wallet instead.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
+				return err
+			}
+			if err := rejectAddressLikeWalletName(name); err != nil {
 				return err
 			}
 			if err := confirmWalletOverwrite(cfg, name, overwrite); err != nil {

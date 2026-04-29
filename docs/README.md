@@ -3,7 +3,8 @@
 `monujo` is a minimalist Go CLI for working with the **TRON** network:
 reading balances and **TRC-20 USDT** transfer history for cold
 addresses (public data only, no private keys), managing a **local
-encrypted keystore** (create/import and optional **external** named
+encrypted keystore** (create/import; **names must not be valid Tron
+addresses** to avoid ambiguity with `--addr`/`--from`/`--to`; optional **external** named
 addresses), **hot wallet** operations
 (online signing and sending TRX/USDT) and **air-gap signing** for
 cold storage.

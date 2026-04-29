@@ -459,7 +459,11 @@ JSON вручную (поле `networks`).
 
 `hot balance`, `hot send-*`, `offline build`/`sign` и `wallet check`
 обращаются к keystore по флагам **`--addr`** (субъект без `--to` в CLI)
-или **`--from`/`--to`** (переводы и сборка unsigned):
+или **`--from`/`--to`** (переводы и сборка unsigned). Команды
+`wallet create`, `wallet import` и `wallet import-external` не позволяют
+задать `--name`, который после нормализации выглядит как валидный Tron
+base58-адрес — иначе это имя позже пересеклось бы с эвристикой «адрес
+или имя» в тех же флагах.
 
 Для записей **`import-external`** (`"external": true`) подстановка адреса
 по имени работает там же, где для обычного кошелька достаточно поля

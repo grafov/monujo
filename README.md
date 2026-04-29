@@ -52,7 +52,7 @@ No private keys; uses public TronGrid HTTP APIs.
 
 ## Wallet management (no network)
 
-The `wallet` group manages the local encrypted keystore (`~/.config/monujo/keystore` by default) without touching the Tron network. The same files are consumed by both `hot` (online operations on this machine) and `offline sign` (air-gapped signing on a different machine).
+The `wallet` group manages the local encrypted keystore (`~/.config/monujo/keystore` by default) without touching the Tron network. The same files are consumed by both `hot` (online operations on this machine) and `offline sign` (air-gapped signing on a different machine). **Wallet names** must not be valid Tron base58 addresses (the CLI rejects them on create/import) so they are not confused with `--addr` / `--from` / `--to` values elsewhere.
 
 List wallets (name, type `local`/`external`, address, recorded networks):
 
