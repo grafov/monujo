@@ -66,6 +66,14 @@ const (
 	legacyBackupSuffix = ".scrypt.bak"
 )
 
+func validateTronBase58Address(s string) error {
+	s = strings.TrimSpace(s)
+	if _, err := address.Base58ToAddress(s); err != nil {
+		return fmt.Errorf("invalid Tron address: %w", err)
+	}
+	return nil
+}
+
 // EncryptedWalletFile is the on-disk JSON format for monujo keystore
 // files. The same struct represents both v1 (scrypt, legacy) and v2
 // (argon2id, current) files; which set of KDF fields is populated
@@ -80,6 +88,7 @@ const (
 // introduce spurious zero-valued argon2_* fields.
 type EncryptedWalletFile struct {
 	Version  int      `json:"version"`
+	External bool     `json:"external,omitempty"`
 	Address  string   `json:"address"`
 	Networks []string `json:"networks,omitempty"`
 	KDF      string   `json:"kdf"`
@@ -106,6 +115,7 @@ type WalletListItem struct {
 	Name     string   `json:"name"`
 	Address  string   `json:"address"`
 	Networks []string `json:"networks,omitempty"`
+	External bool     `json:"external"`
 }
 
 // NormalizeNetworkID returns lowercase Tron network ids used in keystore (mainnet, shasta).
@@ -160,8 +170,8 @@ func NetworkOperationNeedsConfirmation(recorded []string, operationNetwork strin
 	return true
 }
 
-// ListWallets returns one entry per valid v1 wallet JSON in keystoreDir, sorted by name.
-// A missing directory yields an empty list. Unreadable or non-v1 JSON files are skipped.
+// ListWallets returns one entry per valid wallet JSON in keystoreDir, sorted by name.
+// A missing directory yields an empty list. Unreadable or invalid JSON files are skipped.
 func ListWallets(keystoreDir string) ([]WalletListItem, error) {
 	entries, err := os.ReadDir(keystoreDir)
 	if err != nil {
@@ -194,14 +204,37 @@ func ListWallets(keystoreDir string) ([]WalletListItem, error) {
 		if err := json.Unmarshal(body, &ew); err != nil {
 			continue
 		}
-		if !isSupportedVersion(ew.Version) || strings.TrimSpace(ew.Address) == "" {
+		addr := strings.TrimSpace(ew.Address)
+		if addr == "" {
 			continue
 		}
 		stem := name[:len(name)-len(".json")]
+		if ew.External {
+			if ew.Version != fileVersion {
+				continue
+			}
+			if err := validateTronBase58Address(addr); err != nil {
+				continue
+			}
+			out = append(out, WalletListItem{
+				Name:     stem,
+				Address:  addr,
+				Networks: normalizeNetworkList(ew.Networks),
+				External: true,
+			})
+			continue
+		}
+		if !isSupportedVersion(ew.Version) {
+			continue
+		}
+		if strings.TrimSpace(ew.KDF) == "" {
+			continue
+		}
 		out = append(out, WalletListItem{
 			Name:     stem,
-			Address:  ew.Address,
+			Address:  addr,
 			Networks: normalizeNetworkList(ew.Networks),
+			External: false,
 		})
 	}
 	slices.SortFunc(out, func(a, b WalletListItem) int {
@@ -261,6 +294,12 @@ func ReadWalletNetworks(keystoreDir, name string) ([]string, error) {
 	if err := json.Unmarshal(body, &ew); err != nil {
 		return nil, err
 	}
+	if ew.External {
+		if ew.Version != fileVersion {
+			return nil, fmt.Errorf("unsupported keystore version %d", ew.Version)
+		}
+		return normalizeNetworkList(ew.Networks), nil
+	}
 	if !isSupportedVersion(ew.Version) {
 		return nil, fmt.Errorf("unsupported keystore version %d", ew.Version)
 	}
@@ -283,6 +322,9 @@ func EnsureNetworkRecorded(keystoreDir, name, network string) error {
 	var ew EncryptedWalletFile
 	if err := json.Unmarshal(body, &ew); err != nil {
 		return err
+	}
+	if ew.External {
+		return fmt.Errorf("wallet %q is external (address-only); networks cannot be updated this way", name)
 	}
 	if !isSupportedVersion(ew.Version) {
 		return fmt.Errorf("unsupported keystore version %d", ew.Version)
@@ -386,6 +428,35 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 	return addr, nil
 }
 
+// StoreExternal writes an address-only wallet record (no private key) under
+// safeName(name).json. Such entries appear in [ListWallets] with External
+// true and cannot be used with [LoadPrivateKey]. It returns the normalized
+// base58 address written to the file.
+func StoreExternal(keystoreDir, name, tronAddress string, networks []string) (string, error) {
+	addr := strings.TrimSpace(tronAddress)
+	if err := validateTronBase58Address(addr); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(keystoreDir, 0o700); err != nil {
+		return "", err
+	}
+	ef := EncryptedWalletFile{
+		Version:  fileVersion,
+		External: true,
+		Address:  addr,
+		Networks: normalizeNetworkList(networks),
+	}
+	body, err := json.MarshalIndent(&ef, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(keystoreDir, safeName(name)+".json")
+	if err := writeFileAtomic(path, body, 0o600); err != nil {
+		return "", err
+	}
+	return addr, nil
+}
+
 // buildV2Envelope encrypts plain with argon2id+AES-256-GCM and returns the
 // v2 on-disk envelope. plain is not zeroed by this function; callers own the
 // buffer's lifetime.
@@ -455,6 +526,9 @@ func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, erro
 	var ew EncryptedWalletFile
 	if err := json.Unmarshal(body, &ew); err != nil {
 		return nil, err
+	}
+	if ew.External {
+		return nil, fmt.Errorf("wallet %q is external (address-only) and has no private key", name)
 	}
 	if !isSupportedVersion(ew.Version) {
 		return nil, fmt.Errorf("unsupported keystore version %d", ew.Version)

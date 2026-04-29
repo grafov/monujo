@@ -39,6 +39,56 @@ var _ = Describe("monujo wallet group", func() {
 		Expect(items).To(HaveLen(1))
 		Expect(items[0].Name).To(Equal("w1"))
 		Expect(items[0].Address).NotTo(BeEmpty())
+		Expect(items[0].External).To(BeFalse())
+	})
+
+	It("imports an external wallet via HotService and lists it as external", func() {
+		dir := GinkgoT().TempDir()
+		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", dir)
+		Expect(err).NotTo(HaveOccurred())
+		svc := app.NewHotService(cfg)
+		const addr = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+		Expect(svc.ImportExternalWallet("cust", addr)).To(Succeed())
+
+		items, err := keystore.ListWallets(dir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(items).To(HaveLen(1))
+		Expect(items[0].Name).To(Equal("cust"))
+		Expect(items[0].Address).To(Equal(addr))
+		Expect(items[0].External).To(BeTrue())
+	})
+
+	It("wallet import-external via root creates a file without passphrase", func() {
+		dir := GinkgoT().TempDir()
+		const addr = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "import-external", "--name", "ext1", "--addr", addr})
+
+		Expect(root.Execute()).To(Succeed())
+		items, err := keystore.ListWallets(dir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(items).To(HaveLen(1))
+		Expect(items[0].External).To(BeTrue())
+	})
+
+	It("wallet check refuses an external wallet before passphrase", func() {
+		dir := GinkgoT().TempDir()
+		const addr = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+		_, err := keystore.StoreExternal(dir, "onlyaddr", addr, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetIn(strings.NewReader("should-not-be-read\n"))
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "check", "--addr", "onlyaddr"})
+
+		err = root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("external"))
 	})
 
 	It("registers wallet subcommands under root", func() {
@@ -51,7 +101,7 @@ var _ = Describe("monujo wallet group", func() {
 				}
 			}
 		}
-		Expect(found).To(ConsistOf("list", "create", "import", "check"))
+		Expect(found).To(ConsistOf("list", "create", "import", "import-external", "check"))
 	})
 
 	It("wallet check succeeds with correct passphrase (by wallet name)", func() {

@@ -88,13 +88,17 @@ same key unless --force is passed.`,
 			if err != nil {
 				return err
 			}
-			name, resolvedAddr, ok, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
+			res, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
 			if err != nil {
 				return err
 			}
-			if !ok {
-				return fmt.Errorf("address %q not found in keystore %q; multisig cosign needs the private key, pass the wallet name instead", resolvedAddr, cfg.KeystoreDir)
+			if !res.KnownInKeystore {
+				return fmt.Errorf("address %q not found in keystore %q; multisig cosign needs the private key, pass the wallet name instead", res.Address, cfg.KeystoreDir)
 			}
+			if res.External {
+				return fmt.Errorf("wallet %q is external (address-only); multisig cosign needs a local encrypted keystore file", res.Name)
+			}
+			name := res.Name
 			fm, err := parseMultisigFormat(format)
 			if err != nil {
 				return err

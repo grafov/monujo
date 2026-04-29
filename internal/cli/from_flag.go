@@ -8,6 +8,15 @@ import (
 	"github.com/grafov/monujo/internal/tron"
 )
 
+// WalletResolution is the result of resolving a wallet name or base58 address
+// against the keystore directory (plaintext metadata only).
+type WalletResolution struct {
+	Name            string
+	Address         string
+	KnownInKeystore bool
+	External        bool
+}
+
 // looksLikeTronAddress reports whether s passes Tron base58 address
 // validation. The CLI uses this to disambiguate sender/subject flags
 // (--from or --addr) between a wallet name and a raw base58 address:
@@ -18,53 +27,56 @@ func looksLikeTronAddress(s string) bool {
 }
 
 // resolveWalletFrom interprets the CLI value for --from or --addr (either
-// a keystore wallet name or a Tron base58 address) and returns both the
-// wallet name and the base58 address it refers to. flag is the flag name
-// for user-facing errors (e.g. "--from", "--addr").
+// a keystore wallet name or a Tron base58 address) and returns resolution
+// details. flag is the flag name for user-facing errors (e.g. "--from", "--addr").
 //
 // Behavior:
 //   - Empty input yields an error.
 //   - Input that parses as a base58 address is looked up by Address in the
-//     keystore. On hit, returns (walletName, inputAddress, true, nil); on
-//     miss, returns ("", inputAddress, false, nil) so callers that do not
-//     need a keystore file (e.g. `hot balance`, `offline build`) can still
-//     proceed with just the address.
+//     keystore. On hit, KnownInKeystore is true and External reflects the entry.
+//     On miss, only Address is set (same as raw input) and KnownInKeystore is false.
 //   - Anything else is treated as a wallet name and looked up by Name in
-//     the keystore. On hit, returns (name, walletAddress, true, nil); on
-//     miss, returns ("", "", false, error) because a name that is not on
-//     disk is almost certainly a user typo rather than an intentional
-//     bypass.
+//     the keystore. On hit, KnownInKeystore is true. On miss, error.
 //
 // The keystore is accessed via keystore.ListWallets, which reads only the
-// plaintext metadata of the encrypted wallet files and never attempts to
-// decrypt the private keys.
-func resolveWalletFrom(keystoreDir, from, flag string) (name, address string, ok bool, err error) {
+// plaintext metadata of wallet files and never attempts to decrypt private keys.
+func resolveWalletFrom(keystoreDir, from, flag string) (WalletResolution, error) {
 	in := strings.TrimSpace(from)
 	if in == "" {
-		return "", "", false, fmt.Errorf("%s must be provided (Tron base58 address or keystore wallet name)", flag)
+		return WalletResolution{}, fmt.Errorf("%s must be provided (Tron base58 address or keystore wallet name)", flag)
 	}
 	if looksLikeTronAddress(in) {
 		items, listErr := keystore.ListWallets(keystoreDir)
 		if listErr != nil {
-			return "", "", false, fmt.Errorf("resolve %s address: %w", flag, listErr)
+			return WalletResolution{}, fmt.Errorf("resolve %s address: %w", flag, listErr)
 		}
 		for _, w := range items {
 			if w.Address == in {
-				return w.Name, in, true, nil
+				return WalletResolution{
+					Name:            w.Name,
+					Address:         in,
+					KnownInKeystore: true,
+					External:        w.External,
+				}, nil
 			}
 		}
-		return "", in, false, nil
+		return WalletResolution{Address: in}, nil
 	}
 	items, listErr := keystore.ListWallets(keystoreDir)
 	if listErr != nil {
-		return "", "", false, fmt.Errorf("resolve %s wallet name: %w", flag, listErr)
+		return WalletResolution{}, fmt.Errorf("resolve %s wallet name: %w", flag, listErr)
 	}
 	for _, w := range items {
 		if w.Name == in {
-			return in, w.Address, true, nil
+			return WalletResolution{
+				Name:            in,
+				Address:         w.Address,
+				KnownInKeystore: true,
+				External:        w.External,
+			}, nil
 		}
 	}
-	return "", "", false, fmt.Errorf("wallet %q not found in keystore %q", in, keystoreDir)
+	return WalletResolution{}, fmt.Errorf("wallet %q not found in keystore %q", in, keystoreDir)
 }
 
 // resolveRecipient interprets the --to CLI flag value as either a Tron

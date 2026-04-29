@@ -62,6 +62,24 @@ func (h *HotService) ImportWallet(name, privHex string, pass []byte) error {
 	return nil
 }
 
+// ImportExternalWallet stores a Tron address under name without any private key material.
+func (h *HotService) ImportExternalWallet(name, tronAddress string) error {
+	addr, err := keystore.StoreExternal(h.ks, name, tronAddress, []string{string(h.cfg.Network)})
+	if err != nil {
+		return err
+	}
+	if h.cfg.Output == config.OutputJSON {
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{
+			"name":     name,
+			"address":  addr,
+			"path":     h.ks,
+			"external": true,
+		})
+	}
+	fmt.Printf("Imported external wallet %q -> %s\nKeystore: %s\n", name, addr, h.ks)
+	return nil
+}
+
 // CreateWallet generates a new private key locally, encrypts it into the keystore, and prints the address.
 // If exportPriv is true, prints the raw hex private key once (high risk); includePrivInJSON adds the key to JSON output.
 func (h *HotService) CreateWallet(name string, pass []byte, exportPriv, includePrivInJSON bool) error {
@@ -108,13 +126,17 @@ func (h *HotService) ListWallets() error {
 		fmt.Println("No wallets.")
 		return nil
 	}
-	fmt.Printf("%s\t%s\t%s\n", "NAME", "ADDRESS", "NETWORKS")
+	fmt.Printf("%-20s\t%-35s\t%s\t%s\n", "NAME", "ADDRESS", "TYPE", "NETWORKS")
 	for _, w := range items {
 		nets := "-"
 		if len(w.Networks) > 0 {
 			nets = strings.Join(w.Networks, ",")
 		}
-		fmt.Printf("%s\t%s\t%s\n", w.Name, w.Address, nets)
+		wtype := "local"
+		if w.External {
+			wtype = "extern"
+		}
+		fmt.Printf("%-20s\t%-35s\t%s\t%s\n", w.Name, w.Address, wtype, nets)
 	}
 	return nil
 }

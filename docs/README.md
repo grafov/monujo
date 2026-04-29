@@ -3,7 +3,8 @@
 `monujo` is a minimalist Go CLI for working with the **TRON** network:
 reading balances and **TRC-20 USDT** transfer history for cold
 addresses (public data only, no private keys), managing a **local
-encrypted keystore** (create/import), **hot wallet** operations
+encrypted keystore** (create/import and optional **external** named
+addresses), **hot wallet** operations
 (online signing and sending TRX/USDT) and **air-gap signing** for
 cold storage.
 
@@ -20,12 +21,12 @@ are stored, and which typical usage scenarios are supported.
 | [03 — Global configuration](03-configuration.md)    | All global flags (`--network`, `--output`, `--http-url`, `--grpc-url`, `--api-key`, `--keystore-dir`) and environment variables.                         |
 | [04 — `watch` commands](04-watch-commands.md)       | Detailed reference for `watch balance` and `watch txs`.                                                                                                  |
 | [05 — `hot` commands](05-hot-commands.md)           | Detailed reference for `hot balance`, `hot send-trx`, `hot send-usdt` (online operations).                                               |
-| [06 — Keystore](06-keystore.md)                     | v2 format (Argon2id) and legacy v1 (scrypt) with auto-migration, KDF/encryption, network metadata, standards compliance, backup.                         |
+| [06 — Keystore](06-keystore.md)                     | v2 format (Argon2id) and legacy v1 (scrypt) with auto-migration, KDF/encryption, **external** address-only JSON, network metadata, standards compliance, backup.                         |
 | [07 — Networks and contracts](07-networks.md)       | Mainnet and Shasta, default endpoints, USDT contract addresses, fee limits.                                                                              |
 | [08 — Typical scenarios](08-scenarios.md)           | Step-by-step recipes: cold address checking, hot wallet creation, first TRX to an address, sending USDT, testing on Shasta, scripted usage.                           |
 | [09 — Troubleshooting](09-troubleshooting.md)       | Decoding errors and ways to work around them.                                                                                                            |
 | [10 — `offline` commands](10-offline-commands.md)   | Air-gap scenario: `offline build` (online), `offline sign` (offline), `offline broadcast` (online); envelope format, HMAC, keystore isolation.           |
-| [11 — `wallet` commands](11-wallet-commands.md)     | Keystore file lifecycle: `wallet list`, `wallet create`, `wallet import`, `wallet check` (offline passphrase verification). These commands do not touch the network and work both online and on air-gap.   |
+| [11 — `wallet` commands](11-wallet-commands.md)     | Keystore lifecycle: `wallet list` (local vs external), `wallet create`, `wallet import`, `wallet import-external`, `wallet check`. No network; works online and on air-gap.   |
 | [12 — Network activity and security](12-network-security.md) | Which subcommands call TronGrid HTTPS vs Tron gRPC, default hosts and paths/RPC names, API key, overrides, and channel security notes. |
 
 ## Quick reference
@@ -42,14 +43,16 @@ make build                                    # binary at build/monujo
 ./build/monujo wallet list
 ./build/monujo wallet create --name myhot
 ./build/monujo wallet import --name imported --key-hex <64_HEX>
-./build/monujo wallet check --addr myhot   # verify passphrase matches keystore (no network)
+./build/monujo wallet import-external --name custodian --addr T...
+./build/monujo wallet check --addr myhot   # local encrypted wallet only (no network)
 
 # Network operations (passphrase required only for signing; balance needs none)
 #
 # --addr: hot balance, wallet check, offline sign (keystore name or base58;
-#   balance allows any address; check/sign need a local wallet).
-# --from / --to: hot send-trx, hot send-usdt, offline build (sender must map
-#   to a local wallet for hot sends; build can use cold base58 without keystore).
+#   balance allows any address; check/sign need a local encrypted wallet, not import-external).
+# --from / --to: hot send-trx, hot send-usdt, offline build (--from/--to may use
+#   wallet names including external aliases where only an address is needed;
+#   hot send --from must be a local encrypted wallet).
 ./build/monujo hot balance   --addr myhot
 ./build/monujo hot balance   --addr T...                 # arbitrary address, no keystore needed
 ./build/monujo hot send-trx  --from funding --to T... --amount 1

@@ -7,7 +7,7 @@ Monujo is a minimal **Go CLI** tool for **Tron blockchain** and **USDT (TRC-20)*
 ## Features
 
 - **Watch-only mode**: Query balances and transaction history for any Tron address without requiring private keys
-- **Wallet lifecycle**: Create or import wallet files in a local encrypted keystore (no network required)
+- **Wallet lifecycle**: Create or import wallet files in a local encrypted keystore, or add **external** named addresses (`wallet import-external`) without private keys (no network required)
 - **Hot wallet**: Online sending of TRX and USDT with interactive confirmation, using a wallet from the keystore
 - **Offline signing**: Air-gapped workflow for maximum security with `build | sign | broadcast` commands
 - **Multisig participation**: Cosign and broadcast Tron multisig transactions built by external coordinators (`multisig cosign | info | broadcast`); inspect permissions with `watch permissions`
@@ -54,7 +54,7 @@ No private keys; uses public TronGrid HTTP APIs.
 
 The `wallet` group manages the local encrypted keystore (`~/.config/monujo/keystore` by default) without touching the Tron network. The same files are consumed by both `hot` (online operations on this machine) and `offline sign` (air-gapped signing on a different machine).
 
-List wallets (names, addresses, and recorded networks):
+List wallets (name, type `local`/`external`, address, recorded networks):
 
 ```bash
 ./build/monujo wallet list [--output json]
@@ -78,6 +78,12 @@ A built-in passphrase generator is available as the standalone `monujo tool genp
 # passphrase prompts; or set MONUJO_IMPORT_KEY instead of --key-hex
 ```
 
+3. **Import external** — save a Tron base58 address under a name (no private key; shown as `external` in `wallet list`). Use for balance/recipient/build aliases; not for signing.
+
+```bash
+./build/monujo wallet import-external --name custodian --addr <TRON_BASE58>
+```
+
 ## Hot wallet (online PC)
 
 Each wallet file stores optional **`networks`** metadata: which Tron networks (`mainnet`, `shasta`) this wallet has already been used with. **`wallet create`** and **`wallet import`** record the current `--network`. After a successful **`hot send-trx`** or **`hot send-usdt`**, the current network is appended if missing.
@@ -92,7 +98,7 @@ If you run **`hot balance`**, **`hot send-trx`**, or **`hot send-usdt`** with a 
 
 (On testnet, you can use a [Shasta faucet](https://www.trongrid.io/faucet) instead.)
 
-2. **Balance** (no passphrase needed; wallet name or any base58 address; for a named wallet the address is read from the plaintext metadata, then the same public queries as `watch balance`):
+2. **Balance** (no passphrase needed; wallet name resolves via keystore metadata — including **external** address-only aliases — or pass any raw base58 address; then the same public queries as `watch balance`):
 
 ```bash
 ./build/monujo hot balance --addr myhot
@@ -140,7 +146,7 @@ For cold-storage workflows the keystore can live exclusively on an **offline** m
 ./build/monujo offline broadcast --in tx.signed.json
 ```
 
-`offline build --from` accepts either a Tron base58 address (T..., 34 chars) or, if a keystore is present on this online machine, a wallet name from it (no decryption). `offline sign --addr` accepts a keystore wallet name or a base58 address that maps to a local wallet (signing needs the private key).
+`offline build --from` accepts either a Tron base58 address (T..., 34 chars) or, if a keystore is present on this online machine, a wallet name from it (local or **external** alias; no decryption). `offline sign --addr` accepts a **local encrypted** wallet name or a base58 address that maps to such a wallet (external aliases are rejected; signing needs a private key).
 
 Both TRX (`--kind trx`) and USDT (`--kind usdt`) are supported. Tron's `ref_block` / `expiration` give a ~60 second window between `build` and `broadcast`; an expired file must be rebuilt online.
 

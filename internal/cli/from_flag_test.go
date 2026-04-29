@@ -29,28 +29,35 @@ func stashWallet(dir, name string) string {
 	return ""
 }
 
+func stashExternal(dir, name, tronAddr string) {
+	_, err := keystore.StoreExternal(dir, name, tronAddr, []string{"mainnet"})
+	Expect(err).NotTo(HaveOccurred())
+}
+
 var _ = Describe("resolveWalletFrom", func() {
+	const foreignAddr = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+
 	It("rejects an empty value and names the --from flag", func() {
 		dir := GinkgoT().TempDir()
-		_, _, ok, err := resolveWalletFrom(dir, "", "--from")
+		res, err := resolveWalletFrom(dir, "", "--from")
 		Expect(err).To(HaveOccurred())
-		Expect(ok).To(BeFalse())
+		Expect(res.KnownInKeystore).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring("--from must be provided"))
 	})
 
 	It("rejects an empty value and names the --addr flag", func() {
 		dir := GinkgoT().TempDir()
-		_, _, ok, err := resolveWalletFrom(dir, "", "--addr")
+		res, err := resolveWalletFrom(dir, "", "--addr")
 		Expect(err).To(HaveOccurred())
-		Expect(ok).To(BeFalse())
+		Expect(res.KnownInKeystore).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring("--addr must be provided"))
 	})
 
 	It("errors on a wallet name that is not present in the keystore", func() {
 		dir := GinkgoT().TempDir()
-		_, _, ok, err := resolveWalletFrom(dir, "nonexistent", "--from")
+		res, err := resolveWalletFrom(dir, "nonexistent", "--from")
 		Expect(err).To(HaveOccurred())
-		Expect(ok).To(BeFalse())
+		Expect(res.KnownInKeystore).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring(`wallet "nonexistent" not found`))
 	})
 
@@ -58,40 +65,66 @@ var _ = Describe("resolveWalletFrom", func() {
 		dir := GinkgoT().TempDir()
 		addr := stashWallet(dir, "alice")
 
-		name, got, ok, err := resolveWalletFrom(dir, "alice", "--from")
+		res, err := resolveWalletFrom(dir, "alice", "--from")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ok).To(BeTrue())
-		Expect(name).To(Equal("alice"))
-		Expect(got).To(Equal(addr))
+		Expect(res.KnownInKeystore).To(BeTrue())
+		Expect(res.External).To(BeFalse())
+		Expect(res.Name).To(Equal("alice"))
+		Expect(res.Address).To(Equal(addr))
 	})
 
 	It("resolves a base58 address that matches a local wallet back to its name", func() {
 		dir := GinkgoT().TempDir()
 		addr := stashWallet(dir, "bob")
 
-		name, got, ok, err := resolveWalletFrom(dir, addr, "--from")
+		res, err := resolveWalletFrom(dir, addr, "--from")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ok).To(BeTrue())
-		Expect(name).To(Equal("bob"))
-		Expect(got).To(Equal(addr))
+		Expect(res.KnownInKeystore).To(BeTrue())
+		Expect(res.External).To(BeFalse())
+		Expect(res.Name).To(Equal("bob"))
+		Expect(res.Address).To(Equal(addr))
 	})
 
-	It("accepts a valid base58 address absent from the keystore with ok=false", func() {
+	It("accepts a valid base58 address absent from the keystore with KnownInKeystore=false", func() {
 		dir := GinkgoT().TempDir()
-		const foreign = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
 
-		name, got, ok, err := resolveWalletFrom(dir, foreign, "--from")
+		res, err := resolveWalletFrom(dir, foreignAddr, "--from")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ok).To(BeFalse())
-		Expect(name).To(BeEmpty())
-		Expect(got).To(Equal(foreign))
+		Expect(res.KnownInKeystore).To(BeFalse())
+		Expect(res.External).To(BeFalse())
+		Expect(res.Name).To(BeEmpty())
+		Expect(res.Address).To(Equal(foreignAddr))
+	})
+
+	It("resolves an external wallet by name with External=true", func() {
+		dir := GinkgoT().TempDir()
+		stashExternal(dir, "custodian", foreignAddr)
+
+		res, err := resolveWalletFrom(dir, "custodian", "--from")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res.KnownInKeystore).To(BeTrue())
+		Expect(res.External).To(BeTrue())
+		Expect(res.Name).To(Equal("custodian"))
+		Expect(res.Address).To(Equal(foreignAddr))
+	})
+
+	It("resolves an external wallet by base58 address with External=true", func() {
+		dir := GinkgoT().TempDir()
+		stashExternal(dir, "custodian", foreignAddr)
+
+		res, err := resolveWalletFrom(dir, foreignAddr, "--from")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res.KnownInKeystore).To(BeTrue())
+		Expect(res.External).To(BeTrue())
+		Expect(res.Name).To(Equal("custodian"))
+		Expect(res.Address).To(Equal(foreignAddr))
 	})
 
 	It("treats gibberish neither base58 nor matching a name as a name lookup error", func() {
 		dir := GinkgoT().TempDir()
-		_, _, ok, err := resolveWalletFrom(dir, "not-an-addr-and-not-a-name", "--from")
+		res, err := resolveWalletFrom(dir, "not-an-addr-and-not-a-name", "--from")
 		Expect(err).To(HaveOccurred())
-		Expect(ok).To(BeFalse())
+		Expect(res.KnownInKeystore).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring("not found"))
 	})
 
@@ -99,15 +132,17 @@ var _ = Describe("resolveWalletFrom", func() {
 		dir := GinkgoT().TempDir()
 		addr := stashWallet(dir, "carol")
 
-		name, got, ok, err := resolveWalletFrom(dir, "   carol   ", "--from")
+		res, err := resolveWalletFrom(dir, "   carol   ", "--from")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ok).To(BeTrue())
-		Expect(name).To(Equal("carol"))
-		Expect(got).To(Equal(addr))
+		Expect(res.KnownInKeystore).To(BeTrue())
+		Expect(res.Name).To(Equal("carol"))
+		Expect(res.Address).To(Equal(addr))
 	})
 })
 
 var _ = Describe("resolveRecipient", func() {
+	const foreignAddr = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+
 	It("rejects an empty --to value", func() {
 		dir := GinkgoT().TempDir()
 		_, err := resolveRecipient(dir, "")
@@ -119,11 +154,10 @@ var _ = Describe("resolveRecipient", func() {
 		// No keystore file exists in dir, yet a raw address must be
 		// accepted verbatim (recipient is arbitrary).
 		dir := GinkgoT().TempDir()
-		const foreign = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
 
-		got, err := resolveRecipient(dir, foreign)
+		got, err := resolveRecipient(dir, foreignAddr)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(got).To(Equal(foreign))
+		Expect(got).To(Equal(foreignAddr))
 	})
 
 	It("resolves a local wallet name to its address", func() {
@@ -133,6 +167,15 @@ var _ = Describe("resolveRecipient", func() {
 		got, err := resolveRecipient(dir, "dave")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got).To(Equal(addr))
+	})
+
+	It("resolves an external wallet name to its address", func() {
+		dir := GinkgoT().TempDir()
+		stashExternal(dir, "payee", foreignAddr)
+
+		got, err := resolveRecipient(dir, "payee")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(Equal(foreignAddr))
 	})
 
 	It("errors when the name is not in the keystore", func() {

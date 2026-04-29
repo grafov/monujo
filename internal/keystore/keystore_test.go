@@ -84,6 +84,7 @@ var _ = Describe("keystore basic operations", func() {
 		Expect(list).To(HaveLen(2))
 		Expect(list[0].Name).To(Equal("alpha"))
 		Expect(list[0].Address).To(Equal(addr))
+		Expect(list[0].External).To(BeFalse())
 		Expect(list[1].Name).To(Equal("beta"))
 
 		err = os.WriteFile(filepath.Join(dir, "junk.txt"), []byte("x"), 0o600)
@@ -189,5 +190,55 @@ var _ = Describe("keystore basic operations", func() {
 		nets, err = ReadWalletNetworks(dir, "legacy")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(nets).To(Equal([]string{"mainnet"}))
+	})
+})
+
+var _ = Describe("external address-only keystore entries", func() {
+	const validAddr = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+
+	It("stores, lists with External=true, and rejects LoadPrivateKey", func() {
+		dir := GinkgoT().TempDir()
+		gotAddr, err := StoreExternal(dir, "watch1", validAddr, []string{"shasta"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gotAddr).To(Equal(validAddr))
+
+		list, err := ListWallets(dir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(list).To(HaveLen(1))
+		Expect(list[0].Name).To(Equal("watch1"))
+		Expect(list[0].Address).To(Equal(validAddr))
+		Expect(list[0].External).To(BeTrue())
+		Expect(list[0].Networks).To(Equal([]string{"shasta"}))
+
+		pk, err := LoadPrivateKey(dir, "watch1", []byte("any-pass"))
+		Expect(err).To(HaveOccurred())
+		Expect(pk).To(BeNil())
+		Expect(err.Error()).To(ContainSubstring("external"))
+	})
+
+	It("ReadWalletNetworks works without KDF fields", func() {
+		dir := GinkgoT().TempDir()
+		_, err := StoreExternal(dir, "ext", validAddr, []string{"mainnet"})
+		Expect(err).NotTo(HaveOccurred())
+
+		nets, err := ReadWalletNetworks(dir, "ext")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nets).To(Equal([]string{"mainnet"}))
+	})
+
+	It("EnsureNetworkRecorded refuses external wallets", func() {
+		dir := GinkgoT().TempDir()
+		_, err := StoreExternal(dir, "ext", validAddr, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = EnsureNetworkRecorded(dir, "ext", "shasta")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("external"))
+	})
+
+	It("rejects invalid Tron address", func() {
+		dir := GinkgoT().TempDir()
+		_, err := StoreExternal(dir, "bad", "not-an-address", nil)
+		Expect(err).To(HaveOccurred())
 	})
 })

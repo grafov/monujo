@@ -41,14 +41,17 @@ operations require a local wallet file for the private key.`,
 // accepted only when it maps to a local wallet, because sending needs the
 // private key.
 func resolveHotSender(keystoreDir, from string) (string, error) {
-	name, addr, ok, err := resolveWalletFrom(keystoreDir, from, "--from")
+	res, err := resolveWalletFrom(keystoreDir, from, "--from")
 	if err != nil {
 		return "", err
 	}
-	if !ok {
-		return "", fmt.Errorf("address %q not found in keystore %q; sending requires a local private key, pass the wallet name instead", addr, keystoreDir)
+	if !res.KnownInKeystore {
+		return "", fmt.Errorf("address %q not found in keystore %q; sending requires a local private key, pass the wallet name instead", res.Address, keystoreDir)
 	}
-	return name, nil
+	if res.External {
+		return "", fmt.Errorf("wallet %q is external (address-only) and has no private key; use a local wallet for --from", res.Name)
+	}
+	return res.Name, nil
 }
 
 func newHotBalanceCmd() *cobra.Command {
@@ -72,18 +75,21 @@ network, use "wallet check --addr ..." instead of a signing command.`,
 			if err != nil {
 				return err
 			}
-			name, resolvedAddr, ok, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
+			res, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
 			if err != nil {
 				return err
 			}
 			svc := app.NewHotService(cfg)
-			if ok {
-				if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
+			if res.KnownInKeystore {
+				if err := confirmWalletNetworkForOperation(cfg, res.Name, force); err != nil {
 					return err
 				}
-				return svc.PrintBalanceByName(context.Background(), name)
+				if res.External {
+					return svc.PrintBalanceByAddress(context.Background(), res.Address)
+				}
+				return svc.PrintBalanceByName(context.Background(), res.Name)
 			}
-			return svc.PrintBalanceByAddress(context.Background(), resolvedAddr)
+			return svc.PrintBalanceByAddress(context.Background(), res.Address)
 		},
 	}
 	cmd.Flags().StringVar(&addr, "addr", "", "Keystore wallet name OR Tron base58 address")

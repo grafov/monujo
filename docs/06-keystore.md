@@ -49,6 +49,28 @@
 }
 ```
 
+### Внешняя запись (только адрес, без ключа)
+
+Файл с `"external": true` хранит **именованный** Tron-адрес без KDF и без
+шифротекста ключа. Его создаёт `monujo wallet import-external`. Минимальный
+вид:
+
+```json
+{
+  "version": 2,
+  "external": true,
+  "address": "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM",
+  "networks": ["mainnet"]
+}
+```
+
+Такие файлы участвуют в `wallet list` и в резолве имён в командах, где
+нужен только адрес; `LoadPrivateKey`, `wallet check`, отправка с
+`--from`, `offline sign` и `multisig cosign` для них **недоступны**.
+Запись `networks` для внешнего файла задаётся при импорте и **не**
+дополняется автоматически после транзакций (`EnsureNetworkRecorded` для
+внешних записей запрещён).
+
 ### Поля v2
 
 | Поле              | Тип             | Описание                                                                                                                                           |
@@ -438,6 +460,12 @@ JSON вручную (поле `networks`).
 `hot balance`, `hot send-*`, `offline build`/`sign` и `wallet check`
 обращаются к keystore по флагам **`--addr`** (субъект без `--to` в CLI)
 или **`--from`/`--to`** (переводы и сборка unsigned):
+
+Для записей **`import-external`** (`"external": true`) подстановка адреса
+по имени работает там же, где для обычного кошелька достаточно поля
+`address` в JSON; операции с **приватным ключом** (`LoadPrivateKey`,
+`EnsureNetworkRecorded` для дописи сети после broadcast) для таких файлов
+запрещены.
 
 1. Если значение проходит Tron base58-валидацию — оно считается
    адресом.

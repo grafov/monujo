@@ -3,6 +3,8 @@ package cli
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/grafov/monujo/internal/keystore"
 )
 
 var _ = Describe("resolveHotSender", func() {
@@ -32,6 +34,17 @@ var _ = Describe("resolveHotSender", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("not found in keystore"))
 		Expect(err.Error()).To(ContainSubstring("pass the wallet name"))
+	})
+
+	It("rejects an external wallet name for sending", func() {
+		dir := GinkgoT().TempDir()
+		const foreign = "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM"
+		_, err := keystore.StoreExternal(dir, "extpay", foreign, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = resolveHotSender(dir, "extpay")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("external"))
 	})
 
 	It("surfaces the resolve error for a missing wallet name", func() {

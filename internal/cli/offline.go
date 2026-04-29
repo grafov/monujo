@@ -81,10 +81,11 @@ else as a name.`,
 			if err != nil {
 				return err
 			}
-			_, addr, _, err := resolveWalletFrom(cfg.KeystoreDir, from, "--from")
+			resFrom, err := resolveWalletFrom(cfg.KeystoreDir, from, "--from")
 			if err != nil {
 				return err
 			}
+			addr := resFrom.Address
 			toAddr, err := resolveRecipient(cfg.KeystoreDir, to)
 			if err != nil {
 				return err
@@ -173,13 +174,17 @@ accidentally signing with a different cold wallet on the offline machine.`,
 			if err != nil {
 				return err
 			}
-			name, resolvedAddr, ok, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
+			res, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
 			if err != nil {
 				return err
 			}
-			if !ok {
-				return fmt.Errorf("address %q not found in keystore %q; offline sign needs the private key, pass the wallet name instead", resolvedAddr, cfg.KeystoreDir)
+			if !res.KnownInKeystore {
+				return fmt.Errorf("address %q not found in keystore %q; offline sign needs the private key, pass the wallet name instead", res.Address, cfg.KeystoreDir)
 			}
+			if res.External {
+				return fmt.Errorf("wallet %q is external (address-only); offline sign needs a local encrypted keystore file", res.Name)
+			}
+			name := res.Name
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
 

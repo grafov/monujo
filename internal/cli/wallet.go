@@ -19,14 +19,15 @@ func newWalletCmd() *cobra.Command {
 	w := &cobra.Command{
 		Use:   "wallet",
 		Short: "Local encrypted keystore management (no network)",
-		Long: `Manage local keystore files: list, create new wallets, import existing
-private keys. None of these subcommands talk to the Tron network; the
-same files are consumed both by the online "hot" commands and by the
-air-gapped "offline sign" command.`,
+		Long: `Manage local keystore files: list, create new encrypted wallets, import hex
+private keys, and add external Tron addresses as named aliases (no private key).
+None of these subcommands talk to the Tron network; the same files are consumed
+both by the online "hot" commands and by the air-gapped "offline sign" command.`,
 	}
 	w.AddCommand(newWalletListCmd())
 	w.AddCommand(newWalletCreateCmd())
 	w.AddCommand(newWalletImportCmd())
+	w.AddCommand(newWalletImportExternalCmd())
 	w.AddCommand(newWalletCheckCmd())
 	return w
 }
@@ -47,13 +48,17 @@ actually loads the private key briefly in memory.`,
 			if err != nil {
 				return err
 			}
-			name, resolvedAddr, ok, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
+			res, err := resolveWalletFrom(cfg.KeystoreDir, addr, "--addr")
 			if err != nil {
 				return err
 			}
-			if !ok {
-				return fmt.Errorf("address %q not found in keystore %q; wallet check needs a local wallet (see wallet list), or pass --addr as a wallet name", resolvedAddr, cfg.KeystoreDir)
+			if !res.KnownInKeystore {
+				return fmt.Errorf("address %q not found in keystore %q; wallet check needs a local wallet (see wallet list), or pass --addr as a wallet name", res.Address, cfg.KeystoreDir)
 			}
+			if res.External {
+				return fmt.Errorf("wallet %q is external (address-only); wallet check requires a local encrypted keystore file", res.Name)
+			}
+			name := res.Name
 			pass, err := readUnlockPassphrase(cmd, "Keystore passphrase: ")
 			if err != nil {
 				return err
@@ -171,6 +176,39 @@ func newWalletImportCmd() *cobra.Command {
 		"DANGEROUS: replace existing wallet file; the previous private key is permanently lost")
 	registerGenerateFlags(cmd, &gen)
 	_ = cmd.MarkFlagRequired("name")
+	return cmd
+}
+
+func newWalletImportExternalCmd() *cobra.Command {
+	var name string
+	var tronAddr string
+	var overwrite bool
+	cmd := &cobra.Command{
+		Use:   "import-external",
+		Short: "Import a Tron address as a named external wallet (no private key)",
+		Long: `Store a Tron base58 address under a keystore file name so you can refer to it
+by name in commands that accept a wallet name or address (e.g. hot balance --addr,
+hot send-* --to, offline build --from/--to). The file contains no private key
+material; signing commands (hot send-* --from, offline sign, multisig cosign,
+wallet check) require a local encrypted wallet instead.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			if err := confirmWalletOverwrite(cfg, name, overwrite); err != nil {
+				return err
+			}
+			svc := app.NewHotService(cfg)
+			return svc.ImportExternalWallet(name, tronAddr)
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "Wallet name (file name in keystore)")
+	cmd.Flags().StringVar(&tronAddr, "addr", "", "Tron base58 address to store as an external alias")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false,
+		"DANGEROUS: replace existing wallet file; if the previous file held a private key it is permanently lost")
+	_ = cmd.MarkFlagRequired("name")
+	_ = cmd.MarkFlagRequired("addr")
 	return cmd
 }
 

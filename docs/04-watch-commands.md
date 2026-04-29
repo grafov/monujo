@@ -218,9 +218,10 @@ $ monujo watch txs --addr TXYZ... --limit 3
 `core.Transaction_Contract_ContractType_name`) и список подписантов
 `keys: {address, weight}`.
 
-Если адрес ключа совпадает с адресом любого локального
-кошелька из `--keystore-dir`, он помечается `[local: <wallet-name>]` —
-так видно, какие из требуемых подписей можно дать своими кошельками.
+Если адрес ключа совпадает с адресом записи в `--keystore-dir`, она
+помечается **`[local: <name>]`** для зашифрованных кошельков или
+**`[external: <name>]`** для записей `wallet import-external` (только
+адрес) — так видно, какие ключи в списке совпадают с вашими именами.
 
 ### Использование
 
@@ -270,6 +271,10 @@ permission active0  id=2  threshold=2
   "active": [ ... ]
 }
 ```
+
+В объектах `keys` при совпадении с keystore поле `local_wallet` содержит
+имя записи; для внешних (`import-external`) алиасов добавляется
+`"external_wallet": true`.
 
 ### Возможные ошибки
 

@@ -108,11 +108,13 @@ type PermissionOutput struct {
 }
 
 // PermissionKey is one signer entry inside a [PermissionOutput]. LocalWallet
-// is non-empty when the address matches a local keystore wallet.
+// is non-empty when the address matches a keystore entry (local encrypted
+// wallet or external address-only alias).
 type PermissionKey struct {
-	Address     string `json:"address"`
-	Weight      int64  `json:"weight"`
-	LocalWallet string `json:"local_wallet,omitempty"`
+	Address        string `json:"address"`
+	Weight         int64  `json:"weight"`
+	LocalWallet    string `json:"local_wallet,omitempty"`
+	ExternalWallet bool   `json:"external_wallet,omitempty"`
 }
 
 // PrintPermissions fetches and prints the account permission structure
@@ -137,7 +139,7 @@ func (w *WatchService) PrintPermissions(ctx context.Context, addr string) error 
 	return nil
 }
 
-func permissionsToOutput(p *tron.AccountPermissions, local map[string]string) PermissionsOutput {
+func permissionsToOutput(p *tron.AccountPermissions, local map[string]keystoreAddrEntry) PermissionsOutput {
 	out := PermissionsOutput{Address: p.Address}
 	if p.Owner != nil {
 		out.Owner = permissionToOutput(p.Owner, local, &out.LocalWalletForKey)
@@ -151,7 +153,7 @@ func permissionsToOutput(p *tron.AccountPermissions, local map[string]string) Pe
 	return out
 }
 
-func permissionToOutput(p *tron.AccountPermission, local map[string]string, idxOut *map[string]string) *PermissionOutput {
+func permissionToOutput(p *tron.AccountPermission, local map[string]keystoreAddrEntry, idxOut *map[string]string) *PermissionOutput {
 	o := &PermissionOutput{
 		Type:           p.Type.String(),
 		ID:             p.ID,
@@ -162,26 +164,34 @@ func permissionToOutput(p *tron.AccountPermission, local map[string]string, idxO
 	}
 	for _, k := range p.Keys {
 		out := PermissionKey{Address: k.AddressBase58, Weight: k.Weight}
-		if name, ok := local[k.AddressBase58]; ok {
-			out.LocalWallet = name
+		if ref, ok := local[k.AddressBase58]; ok {
+			out.LocalWallet = ref.Name
+			out.ExternalWallet = ref.External
 			if *idxOut == nil {
 				*idxOut = map[string]string{}
 			}
-			(*idxOut)[k.AddressBase58] = name
+			(*idxOut)[k.AddressBase58] = ref.Name
 		}
 		o.Keys = append(o.Keys, out)
 	}
 	return o
 }
 
-func loadLocalAddressIndex(keystoreDir string) (map[string]string, error) {
+// keystoreAddrEntry maps a Tron address to a keystore logical name and whether
+// the entry is external (address-only, no private key).
+type keystoreAddrEntry struct {
+	Name     string
+	External bool
+}
+
+func loadLocalAddressIndex(keystoreDir string) (map[string]keystoreAddrEntry, error) {
 	items, err := keystore.ListWallets(keystoreDir)
 	if err != nil {
 		return nil, err
 	}
-	idx := make(map[string]string, len(items))
+	idx := make(map[string]keystoreAddrEntry, len(items))
 	for _, w := range items {
-		idx[w.Address] = w.Name
+		idx[w.Address] = keystoreAddrEntry{Name: w.Name, External: w.External}
 	}
 	return idx, nil
 }
@@ -209,7 +219,11 @@ func printOnePermission(p *PermissionOutput) {
 	for _, k := range p.Keys {
 		tag := ""
 		if k.LocalWallet != "" {
-			tag = fmt.Sprintf("  [local: %s]", k.LocalWallet)
+			if k.ExternalWallet {
+				tag = fmt.Sprintf("  [external: %s]", k.LocalWallet)
+			} else {
+				tag = fmt.Sprintf("  [local: %s]", k.LocalWallet)
+			}
 		}
 		fmt.Printf("  key: %s  weight=%d%s\n", k.Address, k.Weight, tag)
 	}
