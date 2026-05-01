@@ -120,7 +120,7 @@ func newHotSendTRXCmd() *cobra.Command {
 			if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
 				return err
 			}
-			pass, err := keystore.ReadPassphrase("Passphrase: ")
+			pass, err := keystore.ReadPassphrase(fmt.Sprintf("Passphrase for %s: ", name))
 			if err != nil {
 				return err
 			}
@@ -161,7 +161,7 @@ func newHotSendUSDTCmd() *cobra.Command {
 			if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
 				return err
 			}
-			pass, err := keystore.ReadPassphrase("Passphrase: ")
+			pass, err := keystore.ReadPassphrase(fmt.Sprintf("Passphrase for %s: ", name))
 			if err != nil {
 				return err
 			}
