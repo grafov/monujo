@@ -1,3 +1,5 @@
+This text in [Esperanto](README.eo.md) | [Русский](README.ru.md)
+
 # Monujo
 
 > In Open Source We Trust
@@ -22,87 +24,7 @@ Minimal **Go CLI** for **Tron / TRC-20 / USDT**: watch-only queries for cold add
 
 ## Component interaction diagram
 
-```plantuml
-@startuml
-skinparam componentStyle rectangle
-skinparam backgroundColor transparent
-
-actor User as user
-
-package "monujo" {
-
-  [CLI\ncobra commands] as cli
-
-  package "internal/app" {
-    [WatchService] as ws
-    [HotService] as hs
-    [OfflineService] as os
-    [MultisigService] as ms
-  }
-
-  package "internal" {
-    [config] as cfg
-    [keystore] as ks
-    [tron.ReadClient] as rc
-    [tron.WriteClient] as wc
-    [domain] as dom
-    [transfer] as xfer
-    [passphrase] as pp
-  }
-}
-
-database "Keystore files\n~/.config/monujo/" as kfiles
-cloud "TronGrid /\nTron full node" as tron
-collections "Transfer files\n*.unsigned.json\n*.signed.json" as tfiles
-
-user --> cli : invokes commands
-cli --> cfg : loadConfig(network, output, urls)
-
-cli --> ws : watch balance/txs/permissions
-ws --> rc : GetBalances, GetPermissions, ListUSDTTransfers
-rc --> tron : HTTP requests
-
-cli --> hs : wallet create/import/list
-hs --> ks : Store, LoadPrivateKey
-hs --> ws : PrintBalance (via ReadClient)
-ks --> kfiles : read/write encrypted files
-
-cli --> hs : hot send-trx/send-usdt
-hs --> ks : LoadPrivateKey
-hs --> wc : SendTRX, SendUSDT
-wc --> tron : gRPC requests
-
-cli --> os : offline build
-os --> rc : BuildUnsignedTRX/USDT
-os --> tron : HTTP ref-block
-os --> xfer : SealPayload
-os --> tfiles : write tx.unsigned.json
-
-cli --> os : offline sign
-os --> ks : LoadPrivateKey
-os --> xfer : Sign envelope
-os --> tfiles : read/write signed file
-
-cli --> os : offline broadcast
-os --> wc : BroadcastTransaction
-wc --> tron : gRPC broadcast
-
-cli --> ms : multisig cosign/info/broadcast
-ms --> ks : LoadPrivateKey
-ms --> xfer : envelope ops
-ms --> wc : SignWeight, Broadcast
-ms --> tfiles : read/write cosign files
-
-cfg ..> pp : passphrase defaults
-dom ..> ws : ParseTRXDecimal, FormatSunAsTRX
-dom ..> hs : amount parsing
-dom ..> os : amount parsing
-dom ..> ms : amount parsing
-xfer ..> os : Marshal/Seal/Open
-xfer ..> ms : Marshal/Seal/Open
-
-@enduml
-```
+![architectural diagram](architecture.png)
 
 ## Build
 
@@ -115,16 +37,16 @@ Requires Go 1.24+ (see `go.mod`).
 
 ## Configuration
 
-| Env / flag | Purpose |
-| --- | --- |
-| `MONUJO_TRONGRID_API_KEY` / `--api-key` | Optional TronGrid API key (recommended for higher rate limits). |
-| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Wallet files directory (default: `~/.config/monujo/keystore`). |
-| `MONUJO_IMPORT_KEY` | Hex private key for `wallet import` if `--key-hex` is omitted. |
-| `--network` | `mainnet` (default) or `shasta` (testnet; USDT contract differs). |
-| `--output` | `table` or `json`. |
-| `--http-url` / `--grpc-url` | Override TronGrid HTTP base URL and gRPC `host:port`. |
-| `--grpc-insecure` | Use plaintext gRPC only for trusted local/private nodes. |
-| `--force` | Skip network-mismatch confirmation on supported hot/offline operations. |
+| Env / flag                               | Purpose                                                                 |
+|------------------------------------------|-------------------------------------------------------------------------|
+| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Optional TronGrid API key (recommended for higher rate limits).         |
+| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Wallet files directory (default: `~/.config/monujo/keystore`).          |
+| `MONUJO_IMPORT_KEY`                      | Hex private key for `wallet import` if `--key-hex` is omitted.          |
+| `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).       |
+| `--output`                               | `table` or `json`.                                                      |
+| `--http-url` / `--grpc-url`              | Override TronGrid HTTP base URL and gRPC `host:port`.                   |
+| `--grpc-insecure`                        | Use plaintext gRPC only for trusted local/private nodes.                |
+| `--force`                                | Skip network-mismatch confirmation on supported hot/offline operations. |
 
 ## Watch-only (cold address, online PC)
 
@@ -279,3 +201,7 @@ The CLI surface is still being shaped; while the major version is `0.x` we do ha
 ## License
 
 See repository root / upstream dependencies (gotron-sdk is LGPL/Apache mix; go-ethereum LGPL). Ensure compliance if you redistribute binaries.
+
+## Starware
+
+Monujo is Starware :) If you like this utility and the code, consider giving it a star ⭐ on GitHub!
