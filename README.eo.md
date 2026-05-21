@@ -1,4 +1,4 @@
-This text in [English](README.md) | [Esperanto](README.eo.md) | [Русский](README.ru.md)
+This text in [English](README.md) | [Русский](README.ru.md)
 
 # Monujo
 
@@ -24,87 +24,8 @@ Minimuma **Go CLI** por **Tron / TRC-20 / USDT**: nur-legaj demandoj por malvarm
 
 ## Diagramo de komponenta interago
 
-```plantuml
-@startuml
-skinparam componentStyle rectangle
-skinparam backgroundColor transparent
+![architectural diagram](architecture.png)
 
-actor User as user
-
-package "monujo" {
-
-  [CLI\ncobra commands] as cli
-
-  package "internal/app" {
-    [WatchService] as ws
-    [HotService] as hs
-    [OfflineService] as os
-    [MultisigService] as ms
-  }
-
-  package "internal" {
-    [config] as cfg
-    [keystore] as ks
-    [tron.ReadClient] as rc
-    [tron.WriteClient] as wc
-    [domain] as dom
-    [transfer] as xfer
-    [passphrase] as pp
-  }
-}
-
-database "Keystore files\n~/.config/monujo/" as kfiles
-cloud "TronGrid /\nTron full node" as tron
-collections "Transfer files\n*.unsigned.json\n*.signed.json" as tfiles
-
-user --> cli : invokes commands
-cli --> cfg : loadConfig(network, output, urls)
-
-cli --> ws : watch balance/txs/permissions
-ws --> rc : GetBalances, GetPermissions, ListUSDTTransfers
-rc --> tron : HTTP requests
-
-cli --> hs : wallet create/import/list
-hs --> ks : Store, LoadPrivateKey
-hs --> ws : PrintBalance (via ReadClient)
-ks --> kfiles : read/write encrypted files
-
-cli --> hs : hot send-trx/send-usdt
-hs --> ks : LoadPrivateKey
-hs --> wc : SendTRX, SendUSDT
-wc --> tron : gRPC requests
-
-cli --> os : offline build
-os --> rc : BuildUnsignedTRX/USDT
-os --> tron : HTTP ref-block
-os --> xfer : SealPayload
-os --> tfiles : write tx.unsigned.json
-
-cli --> os : offline sign
-os --> ks : LoadPrivateKey
-os --> xfer : Sign envelope
-os --> tfiles : read/write signed file
-
-cli --> os : offline broadcast
-os --> wc : BroadcastTransaction
-wc --> tron : gRPC broadcast
-
-cli --> ms : multisig cosign/info/broadcast
-ms --> ks : LoadPrivateKey
-ms --> xfer : envelope ops
-ms --> wc : SignWeight, Broadcast
-ms --> tfiles : read/write cosign files
-
-cfg ..> pp : passphrase defaults
-dom ..> ws : ParseTRXDecimal, FormatSunAsTRX
-dom ..> hs : amount parsing
-dom ..> os : amount parsing
-dom ..> ms : amount parsing
-xfer ..> os : Marshal/Seal/Open
-xfer ..> ms : Marshal/Seal/Open
-
-@enduml
-```
 
 ## Konstruado
 
@@ -117,16 +38,16 @@ Postulas Go 1.24+ (vidu `go.mod`).
 
 ## Agordado
 
-| Medivariablo / flago | Celo |
-| --- | --- |
-| `MONUJO_TRONGRID_API_KEY` / `--api-key` | Nedeviga TronGrid API-ŝlosilo (rekomendata por pli altaj limoj). |
-| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Dosierujo por monujaj dosieroj (defaŭlte: `~/.config/monujo/keystore`). |
-| `MONUJO_IMPORT_KEY` | Deksesuma privata ŝlosilo por `wallet import` se `--key-hex` estas preterlasita. |
-| `--network` | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas). |
-| `--output` | `table` aŭ `json`. |
-| `--http-url` / `--grpc-url` | Anstataŭigi TronGrid HTTP-bazan URL-on kaj gRPC `host:port`. |
-| `--grpc-insecure` | Uzi neĉifritan gRPC nur por fidindaj lokaj/privataj nodoj. |
-| `--force` | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj. |
+| Medivariablo / flago                     | Celo                                                                             |
+|------------------------------------------|----------------------------------------------------------------------------------|
+| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Nedeviga TronGrid API-ŝlosilo (rekomendata por pli altaj limoj).                 |
+| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Dosierujo por monujaj dosieroj (defaŭlte: `~/.config/monujo/keystore`).          |
+| `MONUJO_IMPORT_KEY`                      | Deksesuma privata ŝlosilo por `wallet import` se `--key-hex` estas preterlasita. |
+| `--network`                              | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas).          |
+| `--output`                               | `table` aŭ `json`.                                                               |
+| `--http-url` / `--grpc-url`              | Anstataŭigi TronGrid HTTP-bazan URL-on kaj gRPC `host:port`.                     |
+| `--grpc-insecure`                        | Uzi neĉifritan gRPC nur por fidindaj lokaj/privataj nodoj.                       |
+| `--force`                                | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj. |
 
 ## Nur-lega (malvarma adreso, reta komputilo)
 
@@ -284,4 +205,4 @@ Vidu la radikon de la deponejo / kontraŭfluajn dependecojn (gotron-sdk estas mi
 
 ## Starware
 
-Monujo estas Starware. Se vi ŝatas ĉi tiun projekton aŭ trovas ĝin utila, bonvolu konsideri doni al ĝi stelon (⭐) ĉe GitHub!
+Monujo estas Starware :) Se vi ŝatas ĉi tiun projekton aŭ trovas ĝin utila, bonvolu konsideri doni al ĝi stelon ⭐ ĉe GitHub!

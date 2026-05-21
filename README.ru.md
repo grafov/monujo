@@ -1,4 +1,4 @@
-This text in [English](README.md) | [Esperanto](README.eo.md) | [Русский](README.ru.md)
+This text in [English](README.md) | [Esperanto](README.eo.md)
 
 # Monujo
 
@@ -24,87 +24,8 @@ Monujo — это минималистичная **Go CLI** утилита дл�
 
 ## Диаграмма взаимодействия компонентов
 
-```plantuml
-@startuml
-skinparam componentStyle rectangle
-skinparam backgroundColor transparent
+![architectural diagram](architecture.png)
 
-actor User as user
-
-package "monujo" {
-
-  [CLI\ncobra commands] as cli
-
-  package "internal/app" {
-    [WatchService] as ws
-    [HotService] as hs
-    [OfflineService] as os
-    [MultisigService] as ms
-  }
-
-  package "internal" {
-    [config] as cfg
-    [keystore] as ks
-    [tron.ReadClient] as rc
-    [tron.WriteClient] as wc
-    [domain] as dom
-    [transfer] as xfer
-    [passphrase] as pp
-  }
-}
-
-database "Keystore files\n~/.config/monujo/" as kfiles
-cloud "TronGrid /\nTron full node" as tron
-collections "Transfer files\n*.unsigned.json\n*.signed.json" as tfiles
-
-user --> cli : invokes commands
-cli --> cfg : loadConfig(network, output, urls)
-
-cli --> ws : watch balance/txs/permissions
-ws --> rc : GetBalances, GetPermissions, ListUSDTTransfers
-rc --> tron : HTTP requests
-
-cli --> hs : wallet create/import/list
-hs --> ks : Store, LoadPrivateKey
-hs --> ws : PrintBalance (via ReadClient)
-ks --> kfiles : read/write encrypted files
-
-cli --> hs : hot send-trx/send-usdt
-hs --> ks : LoadPrivateKey
-hs --> wc : SendTRX, SendUSDT
-wc --> tron : gRPC requests
-
-cli --> os : offline build
-os --> rc : BuildUnsignedTRX/USDT
-os --> tron : HTTP ref-block
-os --> xfer : SealPayload
-os --> tfiles : write tx.unsigned.json
-
-cli --> os : offline sign
-os --> ks : LoadPrivateKey
-os --> xfer : Sign envelope
-os --> tfiles : read/write signed file
-
-cli --> os : offline broadcast
-os --> wc : BroadcastTransaction
-wc --> tron : gRPC broadcast
-
-cli --> ms : multisig cosign/info/broadcast
-ms --> ks : LoadPrivateKey
-ms --> xfer : envelope ops
-ms --> wc : SignWeight, Broadcast
-ms --> tfiles : read/write cosign files
-
-cfg ..> pp : passphrase defaults
-dom ..> ws : ParseTRXDecimal, FormatSunAsTRX
-dom ..> hs : amount parsing
-dom ..> os : amount parsing
-dom ..> ms : amount parsing
-xfer ..> os : Marshal/Seal/Open
-xfer ..> ms : Marshal/Seal/Open
-
-@enduml
-```
 
 ## Сборка
 
@@ -284,4 +205,4 @@ Tron поддерживает мультисиг нативно (см. разр�
 
 ## Starware
 
-Monujo — это Starware. Если вам нравится этот проект или вы находите его полезным, пожалуйста, рассмотрите возможность поставить ему звезду (⭐) на GitHub!
+Monujo — это Starware :) Если тебе понравилась программа и её код, внеси ⭐ в качестве оплаты — поставь звезду на Github!
