@@ -1,10 +1,8 @@
-##
-# Project Name
+# Project Makefile optimized for running in Linux/MacOS environment.
 #
-# @file
-# @version 0.1
-
-# Go Makefile
+# POSIX sh avoids per-$(shell) startup cost from an inherited user SHELL (e.g. fish)
+# and matches recipe shells unless a target overrides SHELL.
+SHELL := /bin/sh
 
 # Variables
 PRJ=monujo

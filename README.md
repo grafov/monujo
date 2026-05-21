@@ -1,3 +1,5 @@
+This text in [English](README.md) | [Esperanto](README.eo.md) | [Русский](README.ru.md)
+
 # Monujo
 
 > In Open Source We Trust
@@ -279,3 +281,7 @@ The CLI surface is still being shaped; while the major version is `0.x` we do ha
 ## License
 
 See repository root / upstream dependencies (gotron-sdk is LGPL/Apache mix; go-ethereum LGPL). Ensure compliance if you redistribute binaries.
+
+## Starware
+
+Monujo is Starware. If you like this project or find it useful, please consider giving it a star (⭐) on GitHub!
