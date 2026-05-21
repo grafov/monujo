@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"fmt"
 	"math/big"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/grafov/monujo/internal/config"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,8 +29,12 @@ type WriteClient struct {
 // NewWriteClientFromConfig connects to Tron full node gRPC and returns a ready client.
 func NewWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
 	gc := gclient.NewGrpcClientWithTimeout(cfg.GRPCAddress, 60*time.Second)
+	creds := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
+	if cfg.GRPCInsecure {
+		creds = insecure.NewCredentials()
+	}
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(creds),
 	}
 	if err := gc.Start(opts...); err != nil {
 		return nil, err

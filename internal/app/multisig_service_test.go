@@ -227,6 +227,47 @@ var _ = Describe("MultisigService", func() {
 		Expect(pl.To).To(Equal(toAddr))
 	})
 
+	It("rejects monujo multisig envelopes whose display amount disagrees with raw_data", func() {
+		_, conn := startMultisigFake()
+		svc, _, name, from, pass, _ := newMultisigForTest(conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		rawHex := multisigTestRawDataHex(from, toAddr, 1000, 2)
+		pl := transfer.MultisigTransferPayload{
+			Version:       transfer.EnvelopeVersion,
+			Chain:         transfer.ChainTronMainnet,
+			Kind:          transfer.KindTRX,
+			PermissionID:  2,
+			From:          from,
+			To:            toAddr,
+			Amount:        "999",
+			AmountMinimal: "999000000",
+			RawDataHex:    rawHex,
+			TxIDHex:       "0xdeadbeef",
+			Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+		}
+		payload, err := transfer.MarshalMultisigPayload(pl)
+		Expect(err).NotTo(HaveOccurred())
+		body, err := transfer.SealPayload(transfer.KindMultisigTransfer, payload, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		dir := GinkgoT().TempDir()
+		inPath := filepath.Join(dir, "in.json")
+		outPath := filepath.Join(dir, "out.json")
+		Expect(os.WriteFile(inPath, body, 0o600)).To(Succeed())
+
+		_, err = svc.Cosign(CosignOptions{
+			InPath:     inPath,
+			OutPath:    outPath,
+			Format:     MultisigFormatMonujo,
+			WalletName: name,
+			WalletPass: pass,
+			Yes:        true,
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("amount mismatch"))
+	})
+
 	It("refuses to sign twice with the same key (ErrAlreadySigned, no --force)", func() {
 		_, conn := startMultisigFake()
 		svc, _, name, from, pass, _ := newMultisigForTest(conn)
@@ -263,7 +304,7 @@ var _ = Describe("MultisigService", func() {
 		Expect(os.WriteFile(cosigned, body, 0o600)).To(Succeed())
 
 		_, err = svc.Cosign(CosignOptions{
-			InPath: cosigned, OutPath: cosigned, WalletName: name, WalletPass: pass, Yes: true,
+			InPath: cosigned, OutPath: cosigned, WalletName: name, WalletPass: pass, Yes: true, Overwrite: true,
 		})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -309,7 +350,7 @@ var _ = Describe("MultisigService", func() {
 		Expect(os.WriteFile(cosigned, body, 0o600)).To(Succeed())
 
 		_, err = svc.Cosign(CosignOptions{
-			InPath: cosigned, OutPath: cosigned, WalletName: name, WalletPass: pass, Yes: true,
+			InPath: cosigned, OutPath: cosigned, WalletName: name, WalletPass: pass, Yes: true, Overwrite: true,
 		})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -352,7 +393,7 @@ var _ = Describe("MultisigService", func() {
 		Expect(os.WriteFile(cosigned, body, 0o600)).To(Succeed())
 
 		_, err = svc.Cosign(CosignOptions{
-			InPath: cosigned, OutPath: cosigned, WalletName: name, WalletPass: pass, Yes: true,
+			InPath: cosigned, OutPath: cosigned, WalletName: name, WalletPass: pass, Yes: true, Overwrite: true,
 		})
 		Expect(err).NotTo(HaveOccurred())
 

@@ -196,7 +196,7 @@ func runVaultPack(w io.Writer, keystoreDir, outPath string, armorFlag, overwrite
 		default:
 			// Target does not exist: O_EXCL direct create, no temp
 			// file needed.
-			f, err := os.OpenFile(outPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // outPath is a user-supplied destination by design.
+			f, err := os.OpenFile(outPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- outPath is a user-supplied archive destination by design.
 			if err != nil {
 				return fmt.Errorf("vault pack: open --out: %w", err)
 			}
@@ -276,7 +276,7 @@ func runVaultUnpack(w io.Writer, inPath, destDir string, overwrite, dryRun, isTe
 		src = os.Stdin
 		closeFn = func() error { return nil }
 	} else {
-		f, err := os.Open(inPath) //nolint:gosec // inPath is a user-supplied archive by design.
+		f, err := os.Open(inPath) // #nosec G304 -- inPath is a user-supplied archive source by design.
 		if err != nil {
 			return fmt.Errorf("vault unpack: open --in: %w", err)
 		}

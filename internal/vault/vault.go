@@ -135,7 +135,7 @@ func Pack(dst io.Writer, srcDir string, passphrase []byte, opts PackOptions) (Pa
 			continue
 		}
 		path := filepath.Join(srcDir, name)
-		body, err := os.ReadFile(path) //nolint:gosec // path is built from a validated allowlisted basename inside srcDir.
+		body, err := os.ReadFile(path) // #nosec G304 -- path is built from a validated allowlisted basename inside srcDir.
 		if err != nil {
 			return rep, fmt.Errorf("vault pack: read %s: %w", name, err)
 		}
@@ -325,11 +325,72 @@ func Unpack(src io.Reader, destDir string, passphrase []byte, opts UnpackOptions
 		return rep, nil
 	}
 
+	stageDir, err := os.MkdirTemp(destDir, ".monujo-vault-stage-*")
+	if err != nil {
+		return rep, fmt.Errorf("vault unpack: create staging dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(stageDir) }()
+
+	for _, e := range entries {
+		staged := filepath.Join(stageDir, e.name)
+		if err := writeFileAtomic(staged, e.body, 0o600); err != nil {
+			return rep, fmt.Errorf("vault unpack: stage %s: %w", e.name, err)
+		}
+	}
+	backupDir, err := os.MkdirTemp(destDir, ".monujo-vault-backup-*")
+	if err != nil {
+		return rep, fmt.Errorf("vault unpack: create backup dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(backupDir) }()
+
+	type appliedEntry struct {
+		name       string
+		hadBackup  bool
+		backupPath string
+	}
+	var applied []appliedEntry
+	rollback := func() {
+		for i := len(applied) - 1; i >= 0; i-- {
+			a := applied[i]
+			target := filepath.Join(destDir, a.name)
+			_ = os.Remove(target)
+			if a.hadBackup {
+				_ = os.Rename(a.backupPath, target)
+			}
+		}
+	}
+
 	for _, e := range entries {
 		target := filepath.Join(destDir, e.name)
-		if err := writeFileAtomic(target, e.body, 0o600); err != nil {
+		staged := filepath.Join(stageDir, e.name)
+		appliedOne := appliedEntry{name: e.name}
+		if opts.Overwrite {
+			if _, err := os.Stat(target); err == nil {
+				appliedOne.hadBackup = true
+				appliedOne.backupPath = filepath.Join(backupDir, e.name)
+				if err := os.Rename(target, appliedOne.backupPath); err != nil {
+					rollback()
+					return rep, fmt.Errorf("vault unpack: backup %s: %w", e.name, err)
+				}
+			} else if !os.IsNotExist(err) {
+				rollback()
+				return rep, fmt.Errorf("vault unpack: stat %s: %w", e.name, err)
+			}
+		} else if _, err := os.Stat(target); err == nil {
+			rollback()
+			return rep, ErrOverwriteRequired
+		} else if !os.IsNotExist(err) {
+			rollback()
+			return rep, fmt.Errorf("vault unpack: stat %s: %w", e.name, err)
+		}
+		if err := os.Rename(staged, target); err != nil {
+			if appliedOne.hadBackup {
+				_ = os.Rename(appliedOne.backupPath, target)
+			}
+			rollback()
 			return rep, fmt.Errorf("vault unpack: write %s: %w", e.name, err)
 		}
+		applied = append(applied, appliedOne)
 	}
 	return rep, nil
 }

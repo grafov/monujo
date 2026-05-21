@@ -58,6 +58,11 @@ const (
 	kdfScrypt   = "scrypt"
 	kdfArgon2id = "argon2id"
 
+	legacyScryptN      = 32768
+	legacyScryptR      = 8
+	legacyScryptP      = 1
+	legacyScryptKeyLen = 32
+
 	cipherAES256GCM = "aes-256-gcm"
 
 	// legacyBackupSuffix is appended to the safe name when we back up
@@ -70,6 +75,21 @@ func validateTronBase58Address(s string) error {
 	s = strings.TrimSpace(s)
 	if _, err := address.Base58ToAddress(s); err != nil {
 		return fmt.Errorf("invalid Tron address: %w", err)
+	}
+	return nil
+}
+
+// ValidateWalletName rejects names that would be rewritten by the on-disk
+// filename normalizer. Existing legacy files can still be read through
+// safeName, but new writes must be one-to-one to avoid name collisions such as
+// "a/b" and "a_b" sharing the same JSON file.
+func ValidateWalletName(name string) error {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return fmt.Errorf("wallet name must not be empty")
+	}
+	if safeName(trimmed) != trimmed {
+		return fmt.Errorf("wallet name %q is not a safe file name; use only ASCII letters, digits, '-' and '_'", trimmed)
 	}
 	return nil
 }
@@ -340,7 +360,7 @@ func EnsureNetworkRecorded(keystoreDir, name, network string) error {
 		return err
 	}
 	path := filepath.Join(keystoreDir, safeName(name)+".json")
-	return writeFileAtomic(path, out, 0o600)
+	return writeFileAtomic(path, out)
 }
 
 // isSupportedVersion reports whether the keystore file version can be read by this build.
@@ -348,7 +368,7 @@ func isSupportedVersion(v int) bool {
 	return v == fileVersion || v == fileVersionLegacyScrypt
 }
 
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, ".monujo-keystore-*.tmp")
 	if err != nil {
@@ -365,7 +385,7 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 		_ = f.Close()
 		return err
 	}
-	if err := f.Chmod(perm); err != nil {
+	if err := f.Chmod(0o600); err != nil {
 		_ = f.Close()
 		return err
 	}
@@ -406,6 +426,9 @@ func GenerateAndStore(keystoreDir, name string, passphrase []byte, networks []st
 }
 
 func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, passphrase []byte, networks []string) (tronAddress string, err error) {
+	if err := ValidateWalletName(name); err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(keystoreDir, 0o700); err != nil {
 		return "", err
 	}
@@ -422,7 +445,7 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 		return "", err
 	}
 	path := filepath.Join(keystoreDir, safeName(name)+".json")
-	if err := os.WriteFile(path, body, 0o600); err != nil {
+	if err := writeFileAtomic(path, body); err != nil {
 		return "", err
 	}
 	return addr, nil
@@ -433,6 +456,9 @@ func writeEncryptedWallet(keystoreDir, name string, priv *ecdsa.PrivateKey, pass
 // true and cannot be used with [LoadPrivateKey]. It returns the normalized
 // base58 address written to the file.
 func StoreExternal(keystoreDir, name, tronAddress string, networks []string) (string, error) {
+	if err := ValidateWalletName(name); err != nil {
+		return "", err
+	}
 	addr := strings.TrimSpace(tronAddress)
 	if err := validateTronBase58Address(addr); err != nil {
 		return "", err
@@ -451,7 +477,7 @@ func StoreExternal(keystoreDir, name, tronAddress string, networks []string) (st
 		return "", err
 	}
 	path := filepath.Join(keystoreDir, safeName(name)+".json")
-	if err := writeFileAtomic(path, body, 0o600); err != nil {
+	if err := writeFileAtomic(path, body); err != nil {
 		return "", err
 	}
 	return addr, nil
@@ -536,6 +562,9 @@ func LoadPrivateKey(keystoreDir, name string, passphrase []byte) (*PrivKey, erro
 	if err := validateVersionKDF(ew.Version, ew.KDF); err != nil {
 		return nil, err
 	}
+	if err := validateKDFParams(ew); err != nil {
+		return nil, err
+	}
 
 	salt, err := hex.DecodeString(ew.SaltHex)
 	if err != nil {
@@ -598,6 +627,26 @@ func validateVersionKDF(version int, kdf string) error {
 	return nil
 }
 
+func validateKDFParams(ew EncryptedWalletFile) error {
+	switch ew.KDF {
+	case kdfScrypt:
+		if ew.N != legacyScryptN || ew.R != legacyScryptR || ew.P != legacyScryptP {
+			return fmt.Errorf("keystore v1: unsupported scrypt parameters")
+		}
+	case kdfArgon2id:
+		if ew.Argon2Time != argon2Time ||
+			ew.Argon2Memory != argon2Memory ||
+			ew.Argon2Threads != argon2Threads ||
+			ew.Argon2KeyLen != argon2KeyLen {
+
+			return fmt.Errorf("keystore v2: unsupported argon2id parameters")
+		}
+	default:
+		return fmt.Errorf("unsupported kdf %q", ew.KDF)
+	}
+	return nil
+}
+
 // decryptWalletData runs the correct KDF (scrypt for v1, argon2id for v2) and
 // performs AES-256-GCM open. The returned plaintext must be zeroed by the caller.
 func decryptWalletData(ew EncryptedWalletFile, salt, nonce, data, passphrase []byte) ([]byte, error) {
@@ -608,7 +657,7 @@ func decryptWalletData(ew EncryptedWalletFile, salt, nonce, data, passphrase []b
 	switch ew.KDF {
 	case kdfScrypt:
 		var err error
-		dk, err = scrypt.Key(normPass, salt, ew.N, ew.R, ew.P, 32)
+		dk, err = scrypt.Key(normPass, salt, ew.N, ew.R, ew.P, legacyScryptKeyLen)
 		if err != nil {
 			return nil, err
 		}
@@ -674,7 +723,7 @@ func migrateV1ToV2(keystoreDir, name string, old EncryptedWalletFile, plain, pas
 	if err := os.Rename(origPath, backupPath); err != nil {
 		return fmt.Errorf("backup v1 file: %w", err)
 	}
-	if err := writeFileAtomic(origPath, body, 0o600); err != nil {
+	if err := writeFileAtomic(origPath, body); err != nil {
 		// Best-effort: try to restore original from backup so we don't
 		// leave the wallet missing. If restore fails too, the user
 		// still has the .bak file we just wrote.

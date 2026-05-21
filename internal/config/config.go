@@ -36,6 +36,7 @@ type Config struct {
 	TronGridAPIKey string
 	Output         OutputFormat
 	KeystoreDir    string
+	GRPCInsecure   bool
 	// DefaultFeeLimitSun is the maximum fee (sun) for TRC-20 contract calls.
 	DefaultFeeLimitSun int64
 }
@@ -122,6 +123,7 @@ func Build(network Network, output OutputFormat, httpOverride, grpcOverride, api
 		TronGridAPIKey:     strings.TrimSpace(apiKey),
 		Output:             output,
 		KeystoreDir:        keystoreDir,
+		GRPCInsecure:       false,
 		DefaultFeeLimitSun: defaultFeeLimitSun,
 	}, nil
 }

@@ -34,8 +34,20 @@ var _ = Describe("HotService", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		svc := NewHotService(cfg)
-		err = svc.SendTRX(context.Background(), "missing", "TInvalid", "1", []byte("x"))
+		err = svc.SendTRX(context.Background(), "missing", "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM", "1", []byte("x"))
 		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("no such file"))
+	})
+
+	It("SendTRX rejects non-positive amounts before wallet unlock", func() {
+		dir := GinkgoT().TempDir()
+		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", dir)
+		Expect(err).NotTo(HaveOccurred())
+
+		svc := NewHotService(cfg)
+		err = svc.SendTRX(context.Background(), "missing", "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM", "0", []byte("x"))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("amount must be positive"))
 	})
 
 	It("PrintBalanceByName errors for unknown wallet without asking for passphrase", func() {

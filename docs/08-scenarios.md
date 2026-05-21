@@ -47,7 +47,7 @@ export MONUJO_TRONGRID_API_KEY="..."
 переложить кошелёк в другой инструмент):
 
 ```bash
-./build/monujo wallet create --name myhot --export-private-key
+./build/monujo wallet create --name myhot --export-private-key --allow-private-key-export
 # WARNING: printing private key is unsafe; ...
 # Private key (hex): 7b8a...
 ```

@@ -185,4 +185,12 @@ var _ = Describe("resolveRecipient", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring(`wallet "ghost" not found`))
 	})
+
+	It("reports address-like typos as invalid Tron addresses", func() {
+		dir := GinkgoT().TempDir()
+
+		_, err := resolveRecipient(dir, "T000000000000000000000000000000000")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("invalid Tron address"))
+	})
 })

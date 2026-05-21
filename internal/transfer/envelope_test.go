@@ -40,14 +40,15 @@ var _ = Describe("payload envelope marshaling", func() {
 
 	It("round-trips signed payloads", func() {
 		s := SignedTransferPayload{
-			Chain:        ChainTronMainnet,
-			Kind:         KindTRX,
-			From:         "TFrom",
-			To:           "TTo",
-			Amount:       "1.5",
-			RawDataHex:   "0a02abcd",
-			SignatureHex: "0x" + "00",
-			TxIDHex:      "0xabcd",
+			Chain:         ChainTronMainnet,
+			Kind:          KindTRX,
+			From:          "TFrom",
+			To:            "TTo",
+			Amount:        "1.5",
+			AmountMinimal: "1500000",
+			RawDataHex:    "0a02abcd",
+			SignatureHex:  "0x" + "00",
+			TxIDHex:       "0xabcd",
 		}
 
 		b, err := MarshalSignedPayload(s)
@@ -61,7 +62,7 @@ var _ = Describe("payload envelope marshaling", func() {
 
 	It("rejects signed payloads without signature", func() {
 		_, err := MarshalSignedPayload(SignedTransferPayload{
-			Kind: KindTRX, From: "a", To: "b", Amount: "1", RawDataHex: "0a",
+			Kind: KindTRX, From: "a", To: "b", Amount: "1", AmountMinimal: "1000000", RawDataHex: "0a",
 		})
 		Expect(err).To(HaveOccurred())
 	})

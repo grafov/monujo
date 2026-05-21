@@ -60,34 +60,42 @@ air-gap-машину).
 ### `monujo multisig cosign`
 
 Offline. Принимает multisig-транзакцию, верифицирует `raw_data_hex`
-против человеко-читаемых полей (для TRX и USDT — строгая сверка; для
-прочих контрактов — предупреждение и подтверждение), подписывает
+против человеко-читаемых полей (для TRX и USDT — строгая сверка с
+отказом при несовпадении; для прочих контрактов — предупреждение и
+подтверждение), подписывает
 ключом из keystore и записывает обновлённый файл. Отказывается ставить
 вторую подпись тем же ключом — это случайная двойная подпись, которая в
 Tron просто не увеличит вес — если не передан `--force`.
 
-```
+```bash
 monujo multisig cosign \
   --in tx.json --out tx.cosigned.json \
   --addr alice \
   [--format auto|tron-json|monujo] [--out-format ...] \
   [--hmac-passphrase ... | --hmac-passphrase-env VAR] \
-  [--yes] [--force] [--note "для Acme LTD"]
+  [--yes] [--force] [--overwrite] [--note "для Acme LTD"]
 ```
 
 Флаг `--addr` принимает имя кошелька в keystore **или** base58-адрес
 (адрес резолвится через `keystore.ListWallets` без расшифровки; если
 адрес не принадлежит ни одному локальному кошельку — команда выдаст
-ошибку с просьбой передать имя). Совпадение keystore-сети с сетью из
-envelope проверяется; `--force` обходит проверку (та же семантика, что
-в `offline sign`).
+ошибку с просьбой передать имя). Preview перед подтверждением показывает
+`permission_id` транзакции и адрес выбранного signer. Offline `cosign`
+не может доказать, что signer входит в permission keys без обращения к
+ноду; перед раздачей файлов сверяйте это через `watch permissions` или
+онлайн `multisig info`. Совпадение keystore-сети с сетью из envelope
+проверяется; `--force` обходит проверку (та же семантика, что в
+`offline sign`).
+
+`--out` не перезаписывается молча; для замены существующего файла
+нужен явный `--overwrite`.
 
 ### `monujo multisig info`
 
 Online read-only. Показывает, сколько подписей уже накоплено, threshold
 и кто ещё должен подписать:
 
-```
+```bash
 monujo multisig info --in tx.cosigned.json [--format ...] [--hmac-*]
 ```
 
@@ -101,7 +109,7 @@ Online. Pre-check через `GetTransactionSignWeight` — если
 diff (кто уже подписал, кого ещё не хватает). Иначе транзакция
 отправляется в сеть через стандартный `WriteClient`.
 
-```
+```bash
 monujo multisig broadcast \
   --in tx.cosigned.json \
   [--format ...] [--hmac-*] [--yes]

@@ -65,6 +65,33 @@ var _ = Describe("monujo wallet group", func() {
 		Expect(items).To(BeEmpty())
 	})
 
+	It("wallet create rejects names that would collide after sanitization", func() {
+		dir := GinkgoT().TempDir()
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetIn(strings.NewReader("should-not-be-read\n"))
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "create", "--name", "a b"})
+
+		err := root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not a safe file name"))
+	})
+
+	It("wallet import-external rejects whitespace-only names", func() {
+		dir := GinkgoT().TempDir()
+		const extAddr = "TMuA6YqfCeX8EhbfYEg5y7S4DqzSJireY9"
+
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"--keystore-dir", dir, "wallet", "import-external", "--name", "   ", "--addr", extAddr})
+
+		err := root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("wallet name must not be empty"))
+	})
+
 	It("creates a wallet via app.HotService and lists it back", func() {
 		// Drive the same service entry points the `wallet create` and
 		// `wallet list` cobra commands use, against a fresh temp keystore.

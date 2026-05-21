@@ -1,6 +1,7 @@
 package keystore
 
 import (
+	"encoding/json"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -30,8 +31,11 @@ var _ = Describe("keystore basic operations", func() {
 		Expect(pk.Address).To(Equal(addr))
 	})
 
-	It("sanitizes wallet names", func() {
+	It("validates wallet names before writing", func() {
 		Expect(safeName("a b")).To(Equal("a_b"))
+		Expect(ValidateWalletName("a_b-1")).To(Succeed())
+		Expect(ValidateWalletName("a b")).To(HaveOccurred())
+		Expect(ValidateWalletName("   ")).To(HaveOccurred())
 	})
 
 	It("generates and stores wallet key material", func() {
@@ -156,13 +160,41 @@ var _ = Describe("keystore basic operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got).To(BeTrue())
 
-		// Name round-trips through safeName: "a b" is stored as "a_b.json".
-		_, err = Store(dir, "a b", hexKey, pass, nil)
+		// Legacy lookups still pass through safeName so old files remain readable.
+		_, err = Store(dir, "a_b", hexKey, pass, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		got, err = WalletExists(dir, "a b")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got).To(BeTrue())
+	})
+
+	It("rejects unsupported KDF parameters before decrypting", func() {
+		dir := GinkgoT().TempDir()
+		priv, err := crypto.GenerateKey()
+		Expect(err).NotTo(HaveOccurred())
+
+		hexKey := hex.EncodeToString(crypto.FromECDSA(priv))
+		pass := []byte("test-passphrase-32-chars-long!!")
+		defer ZeroPassphrase(pass)
+
+		_, err = Store(dir, "evil", hexKey, pass, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		path := filepath.Join(dir, "evil.json")
+		body, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+
+		var ew EncryptedWalletFile
+		Expect(json.Unmarshal(body, &ew)).To(Succeed())
+		ew.Argon2Memory = 1 << 30
+		body, err = json.MarshalIndent(&ew, "", "  ")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.WriteFile(path, body, 0o600)).To(Succeed())
+
+		_, err = LoadPrivateKey(dir, "evil", pass)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unsupported argon2id parameters"))
 	})
 
 	It("loads legacy file without networks and can append network metadata", func() {

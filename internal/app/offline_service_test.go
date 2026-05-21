@@ -249,6 +249,117 @@ var _ = Describe("OfflineService", func() {
 		Expect(err.Error()).To(ContainSubstring("to mismatch"))
 	})
 
+	It("rejects tampered signed amount before broadcast", func() {
+		fw, conn := startFakeServer()
+		svc, _, name, addr, pass := newOfflineForTest(fw, conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		dir := GinkgoT().TempDir()
+		unsigned := filepath.Join(dir, "u.json")
+		signed := filepath.Join(dir, "s.json")
+
+		_, err := svc.Build(context.Background(), BuildOptions{
+			Kind:        transfer.KindTRX,
+			FromAddress: addr,
+			To:          knownToAddr,
+			AmountTRX:   "1.0",
+			OutPath:     unsigned,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = svc.Sign(SignOptions{
+			InPath:     unsigned,
+			OutPath:    signed,
+			WalletName: name,
+			WalletPass: pass,
+			Yes:        true,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		tamperSignedPayload(signed, func(pl *transfer.SignedTransferPayload) {
+			pl.Amount = "999"
+			pl.AmountMinimal = "999000000"
+		})
+
+		_, err = svc.Broadcast(context.Background(), BroadcastOptions{
+			InPath: signed,
+			Yes:    true,
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("amount mismatch"))
+		Expect(fw.broadcastCalls).To(BeEmpty())
+	})
+
+	It("does not read the keystore passphrase before interactive confirmation", func() {
+		fw, conn := startFakeServer()
+		svc, _, name, addr, pass := newOfflineForTest(fw, conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		dir := GinkgoT().TempDir()
+		unsigned := filepath.Join(dir, "u.json")
+		signed := filepath.Join(dir, "s.json")
+
+		_, err := svc.Build(context.Background(), BuildOptions{
+			Kind:        transfer.KindTRX,
+			FromAddress: addr,
+			To:          knownToAddr,
+			AmountTRX:   "1.0",
+			OutPath:     unsigned,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		svc.confirmIn = strings.NewReader("n\n")
+		reads := 0
+		_, err = svc.Sign(SignOptions{
+			InPath:     unsigned,
+			OutPath:    signed,
+			WalletName: name,
+			ReadWalletPass: func() ([]byte, error) {
+				reads++
+				return append([]byte(nil), pass...), nil
+			},
+			IsTerminal: true,
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("aborted by user"))
+		Expect(reads).To(Equal(0))
+	})
+
+	It("refuses non-interactive sign without --yes before reading passphrase", func() {
+		fw, conn := startFakeServer()
+		svc, _, name, addr, pass := newOfflineForTest(fw, conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		dir := GinkgoT().TempDir()
+		unsigned := filepath.Join(dir, "u.json")
+
+		_, err := svc.Build(context.Background(), BuildOptions{
+			Kind:        transfer.KindTRX,
+			FromAddress: addr,
+			To:          knownToAddr,
+			AmountTRX:   "1.0",
+			OutPath:     unsigned,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		notTTY := false
+		svc.terminalOverride = &notTTY
+		reads := 0
+		_, err = svc.Sign(SignOptions{
+			InPath:     unsigned,
+			OutPath:    filepath.Join(dir, "s.json"),
+			WalletName: name,
+			ReadWalletPass: func() ([]byte, error) {
+				reads++
+				return append([]byte(nil), pass...), nil
+			},
+			IsTerminal: false,
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("without --yes"))
+		Expect(reads).To(Equal(0))
+	})
+
 	It("rejects tampered envelope when HMAC is used", func() {
 		fw, conn := startFakeServer()
 		svc, _, name, addr, pass := newOfflineForTest(fw, conn)
@@ -341,6 +452,31 @@ func tamperPayload(path string, mutate func(*transfer.UnsignedTransferPayload)) 
 
 	mutate(&pl)
 	body, err := transfer.MarshalUnsignedPayload(pl)
+	Expect(err).NotTo(HaveOccurred())
+
+	env.PayloadB64 = base64.StdEncoding.EncodeToString(body)
+	out, err := json.MarshalIndent(env, "", "  ")
+	Expect(err).NotTo(HaveOccurred())
+	Expect(os.WriteFile(path, out, 0o600)).To(Succeed())
+}
+
+func tamperSignedPayload(path string, mutate func(*transfer.SignedTransferPayload)) {
+	GinkgoHelper()
+
+	blob, err := os.ReadFile(path)
+	Expect(err).NotTo(HaveOccurred())
+
+	var env transfer.Envelope
+	Expect(json.Unmarshal(blob, &env)).To(Succeed())
+
+	rawPayload, err := base64.StdEncoding.DecodeString(env.PayloadB64)
+	Expect(err).NotTo(HaveOccurred())
+
+	pl, err := transfer.UnmarshalSignedPayload(rawPayload)
+	Expect(err).NotTo(HaveOccurred())
+
+	mutate(&pl)
+	body, err := transfer.MarshalSignedPayload(pl)
 	Expect(err).NotTo(HaveOccurred())
 
 	env.PayloadB64 = base64.StdEncoding.EncodeToString(body)

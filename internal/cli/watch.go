@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/grafov/monujo/internal/app"
 	"github.com/spf13/cobra"
@@ -75,6 +76,12 @@ func newWatchTxsCmd() *cobra.Command {
 			}
 			svc := app.NewWatchService(cfg)
 			return svc.PrintTransfers(context.Background(), addr, limit)
+		},
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if limit < 1 || limit > 200 {
+				return fmt.Errorf("--limit must be between 1 and 200")
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&addr, "addr", "", "Tron base58 address")

@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/grafov/monujo/internal/config"
@@ -102,6 +103,7 @@ type BuildOptions struct {
 	AmountUSDT     string // for KindTRC20USDT
 	Note           string
 	OutPath        string // file to write the unsigned envelope to; "-" → stdout
+	Overwrite      bool
 	HMACPassphrase []byte // optional; if set, envelope is HMAC-protected
 	IsTerminal     bool   // whether stdin is a tty (caller resolved this)
 }
@@ -177,7 +179,7 @@ func (o *OfflineService) Build(ctx context.Context, opts BuildOptions) (transfer
 	if err != nil {
 		return zeroFP, err
 	}
-	fp, err := o.writeFile(opts.OutPath, blob)
+	fp, err := o.writeFile(opts.OutPath, blob, opts.Overwrite)
 	if err != nil {
 		return zeroFP, err
 	}
@@ -194,6 +196,8 @@ type SignOptions struct {
 	OutPath        string
 	WalletName     string
 	WalletPass     []byte
+	ReadWalletPass func() ([]byte, error)
+	Overwrite      bool
 	HMACPassphrase []byte
 	Yes            bool
 	IsTerminal     bool
@@ -243,7 +247,7 @@ func (o *OfflineService) Sign(opts SignOptions) (transfer.FileFingerprint, error
 
 	o.printConfirm("about to SIGN unsigned transfer", pl, fp, opts.InPath, hmacKey != nil)
 	if !opts.Yes {
-		if err := o.requireConfirm(); err != nil {
+		if err := o.requireConfirm(opts.IsTerminal); err != nil {
 			return fp, err
 		}
 	}
@@ -258,7 +262,13 @@ func (o *OfflineService) Sign(opts SignOptions) (transfer.FileFingerprint, error
 			opts.WalletName, recorded, netForKS)
 	}
 
-	pk, err := keystore.LoadPrivateKey(o.ks, opts.WalletName, opts.WalletPass)
+	walletPass, cleanupPass, err := readSignPassphrase(opts.WalletPass, opts.ReadWalletPass)
+	if err != nil {
+		return fp, err
+	}
+	defer cleanupPass()
+
+	pk, err := keystore.LoadPrivateKey(o.ks, opts.WalletName, walletPass)
 	if err != nil {
 		return fp, err
 	}
@@ -277,18 +287,19 @@ func (o *OfflineService) Sign(opts SignOptions) (transfer.FileFingerprint, error
 	}
 
 	signed := transfer.SignedTransferPayload{
-		Version:      transfer.EnvelopeVersion,
-		Chain:        pl.Chain,
-		Kind:         pl.Kind,
-		From:         pl.From,
-		To:           pl.To,
-		Amount:       pl.Amount,
-		Contract:     pl.Contract,
-		FeeLimitSun:  pl.FeeLimitSun,
-		Expiration:   pl.Expiration,
-		TxIDHex:      pl.TxIDHex,
-		RawDataHex:   pl.RawDataHex,
-		SignatureHex: sigHex,
+		Version:       transfer.EnvelopeVersion,
+		Chain:         pl.Chain,
+		Kind:          pl.Kind,
+		From:          pl.From,
+		To:            pl.To,
+		Amount:        pl.Amount,
+		AmountMinimal: pl.AmountMinimal,
+		Contract:      pl.Contract,
+		FeeLimitSun:   pl.FeeLimitSun,
+		Expiration:    pl.Expiration,
+		TxIDHex:       pl.TxIDHex,
+		RawDataHex:    pl.RawDataHex,
+		SignatureHex:  sigHex,
 	}
 	signedBody, err := transfer.MarshalSignedPayload(signed)
 	if err != nil {
@@ -298,7 +309,7 @@ func (o *OfflineService) Sign(opts SignOptions) (transfer.FileFingerprint, error
 	if err != nil {
 		return fp, err
 	}
-	outFP, err := o.writeFile(opts.OutPath, signedBlob)
+	outFP, err := o.writeFile(opts.OutPath, signedBlob, opts.Overwrite)
 	if err != nil {
 		return outFP, err
 	}
@@ -368,7 +379,7 @@ func (o *OfflineService) Broadcast(ctx context.Context, opts BroadcastOptions) (
 
 	o.printSignedConfirm("about to BROADCAST signed transfer", signed, fp, opts.InPath, hmacKey != nil)
 	if !opts.Yes {
-		if err := o.requireConfirm(); err != nil {
+		if err := o.requireConfirm(opts.IsTerminal); err != nil {
 			return zero, err
 		}
 	}
@@ -404,6 +415,20 @@ func optionalHMACKey(pass []byte) ([]byte, error) {
 		return nil, nil
 	}
 	return transfer.DeriveHMACKey(pass)
+}
+
+func readSignPassphrase(pass []byte, read func() ([]byte, error)) ([]byte, func(), error) {
+	if read != nil {
+		got, err := read()
+		if err != nil {
+			return nil, func() {}, err
+		}
+		return got, func() { keystore.ZeroPassphrase(got) }, nil
+	}
+	if len(pass) == 0 {
+		return nil, func() {}, errors.New("keystore passphrase is required")
+	}
+	return pass, func() {}, nil
 }
 
 // chainForCfg mirrors tron.chainForNetwork at the app layer (we re-derive
@@ -448,6 +473,9 @@ func verifyPayloadAgainstSummary(p transfer.UnsignedTransferPayload, s tron.RawD
 	if s.AmountWei == nil || wantWei.Cmp(s.AmountWei) != 0 {
 		return fmt.Errorf("amount mismatch: payload=%s raw_data=%v", wantWei, s.AmountWei)
 	}
+	if p.Amount != s.AmountStr {
+		return fmt.Errorf("amount display mismatch: payload=%q raw_data=%q", p.Amount, s.AmountStr)
+	}
 	if p.Kind == transfer.KindTRC20USDT && p.Contract != s.Contract {
 		return fmt.Errorf("contract mismatch: payload=%q raw_data=%q", p.Contract, s.Contract)
 	}
@@ -469,6 +497,16 @@ func verifySignedAgainstSummary(p transfer.SignedTransferPayload, s tron.RawData
 	if p.To != s.To {
 		return fmt.Errorf("to mismatch: payload=%q raw_data=%q", p.To, s.To)
 	}
+	wantWei, ok := new(big.Int).SetString(p.AmountMinimal, 10)
+	if !ok {
+		return fmt.Errorf("payload amount_minimal not a decimal int: %q", p.AmountMinimal)
+	}
+	if s.AmountWei == nil || wantWei.Cmp(s.AmountWei) != 0 {
+		return fmt.Errorf("amount mismatch: payload=%s raw_data=%v", wantWei, s.AmountWei)
+	}
+	if p.Amount != s.AmountStr {
+		return fmt.Errorf("amount display mismatch: payload=%q raw_data=%q", p.Amount, s.AmountStr)
+	}
 	if p.Kind == transfer.KindTRC20USDT && p.Contract != s.Contract {
 		return fmt.Errorf("contract mismatch: payload=%q raw_data=%q", p.Contract, s.Contract)
 	}
@@ -480,7 +518,7 @@ func verifySignedAgainstSummary(p transfer.SignedTransferPayload, s tron.RawData
 
 // writeFile writes blob to path (or stdout when path == "-") and returns
 // the SHA-256 fingerprint of the bytes that hit disk.
-func (o *OfflineService) writeFile(path string, blob []byte) (transfer.FileFingerprint, error) {
+func (o *OfflineService) writeFile(path string, blob []byte, overwrite bool) (transfer.FileFingerprint, error) {
 	fp := transfer.FileFingerprint{}
 	if path == "" {
 		return fp, errors.New("output path must not be empty (use \"-\" for stdout)")
@@ -492,7 +530,7 @@ func (o *OfflineService) writeFile(path string, blob []byte) (transfer.FileFinge
 		}
 		_, _ = o.stdout().Write([]byte("\n"))
 	} else {
-		if err := os.WriteFile(path, blob, 0o600); err != nil {
+		if err := writeOutputFile(path, blob, overwrite); err != nil {
 			return fp, fmt.Errorf("write %s: %w", path, err)
 		}
 	}
@@ -520,6 +558,54 @@ func detectKind(blob []byte) string {
 		return probe.Kind
 	}
 	return transfer.KindUnsignedTransfer
+}
+
+func writeOutputFile(path string, blob []byte, overwrite bool) error {
+	clean := filepath.Clean(path)
+	dir := filepath.Dir(clean)
+	base := filepath.Base(clean)
+	if base == "." || base == string(filepath.Separator) {
+		return fmt.Errorf("invalid output path %q", path)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".monujo-output-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	keepTmp := false
+	defer func() {
+		if !keepTmp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(blob); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if overwrite {
+		if err := os.Rename(tmpPath, clean); err != nil {
+			return err
+		}
+		keepTmp = true
+		return nil
+	}
+	if err := os.Link(tmpPath, clean); err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("output file already exists; pass --overwrite to replace it")
+		}
+		return err
+	}
+	return nil
 }
 
 // printConfirm prints the to-be-signed unsigned payload summary to stderr
@@ -558,7 +644,7 @@ func (o *OfflineService) printSignedConfirm(action string, p transfer.SignedTran
 	fmt.Fprintf(w, "  kind:          %s\n", p.Kind)
 	fmt.Fprintf(w, "  from:          %s\n", p.From)
 	fmt.Fprintf(w, "  to:            %s\n", p.To)
-	fmt.Fprintf(w, "  amount:        %s\n", p.Amount)
+	fmt.Fprintf(w, "  amount:        %s (minimal: %s)\n", p.Amount, p.AmountMinimal)
 	if p.Contract != "" {
 		fmt.Fprintf(w, "  contract:      %s\n", p.Contract)
 	}
@@ -571,8 +657,8 @@ func (o *OfflineService) printSignedConfirm(action string, p transfer.SignedTran
 
 // requireConfirm blocks until the user types y/yes on stdin; returns an
 // error if stdin is not a terminal (caller can pre-set --yes for scripts).
-func (o *OfflineService) requireConfirm() error {
-	if !o.isTerminal(true) {
+func (o *OfflineService) requireConfirm(isTerminal bool) error {
+	if !o.isTerminal(isTerminal) {
 		return errors.New("aborted: refused to act without --yes on a non-interactive stdin")
 	}
 	fmt.Fprint(o.stderr(), "Continue? [y/N]: ")

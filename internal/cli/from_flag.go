@@ -26,6 +26,11 @@ func looksLikeTronAddress(s string) bool {
 	return tron.ValidateBase58Address(strings.TrimSpace(s)) == nil
 }
 
+func looksLikeInvalidTronAddress(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.HasPrefix(s, "T") && len(s) == 34
+}
+
 // resolveWalletFrom interprets the CLI value for --from or --addr (either
 // a keystore wallet name or a Tron base58 address) and returns resolution
 // details. flag is the flag name for user-facing errors (e.g. "--from", "--addr").
@@ -95,6 +100,9 @@ func resolveRecipient(keystoreDir, value string) (string, error) {
 	}
 	if looksLikeTronAddress(in) {
 		return in, nil
+	}
+	if looksLikeInvalidTronAddress(in) {
+		return "", tron.ValidateBase58Address(in)
 	}
 	items, err := keystore.ListWallets(keystoreDir)
 	if err != nil {

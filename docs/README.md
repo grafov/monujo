@@ -94,7 +94,7 @@ make build                                    # binary at build/monujo
 - Never commit keystore files, passphrases or hex keys into the
   repository. The `MONUJO_IMPORT_KEY` variable is supported only for
   scripted scenarios in a controlled environment.
-- `wallet create --export-private-key` prints the private key in
+- `wallet create --export-private-key --allow-private-key-export` prints the private key in
   plaintext once — use it only if you knowingly accept the risk.
 - The USDT contract on Shasta (`TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs`)
   is a test token, **not real Tether**. Real USDT exists on mainnet

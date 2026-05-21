@@ -71,6 +71,7 @@ func newMultisigCosignCmd() *cobra.Command {
 		note      string
 		yes       bool
 		force     bool
+		overwrite bool
 	)
 	cmd := &cobra.Command{
 		Use:   "cosign",
@@ -109,12 +110,9 @@ same key unless --force is passed.`,
 			}
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
-
-			pass, err := keystore.ReadPassphrase("Keystore passphrase: ")
-			if err != nil {
-				return err
+			if hmacPass != "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: --hmac-passphrase is visible in process listings and shell history; prefer --hmac-passphrase-env in controlled scripts.")
 			}
-			defer keystore.ZeroPassphrase(pass)
 
 			svc := app.NewMultisigService(cfg)
 			_, err = svc.Cosign(app.CosignOptions{
@@ -123,7 +121,8 @@ same key unless --force is passed.`,
 				Format:         fm,
 				OutFormat:      fmOut,
 				WalletName:     name,
-				WalletPass:     pass,
+				ReadWalletPass: func() ([]byte, error) { return keystore.ReadPassphrase("Keystore passphrase: ") },
+				Overwrite:      overwrite,
 				HMACPassphrase: hmac,
 				Yes:            yes,
 				IsTerminal:     stdinIsTerminal(),
@@ -138,11 +137,12 @@ same key unless --force is passed.`,
 	cmd.Flags().StringVar(&addr, "addr", "", "Keystore wallet name OR Tron base58 address (must map to a local wallet)")
 	cmd.Flags().StringVar(&format, "format", "auto", "Input format (and default output): auto|tron-json|monujo")
 	cmd.Flags().StringVar(&outFormat, "out-format", "auto", "Override output format: auto|tron-json|monujo (default: same as --format)")
-	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for monujo-envelope HMAC integrity")
+	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for monujo-envelope HMAC integrity (unsafe: visible in process listings)")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable")
 	cmd.Flags().StringVar(&note, "note", "", "Optional note carried with a monujo envelope output")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive confirmation prompt (for scripts)")
 	cmd.Flags().BoolVar(&force, "force", false, "Override safety refusals (already-signed, network-mismatch)")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Replace --out if it already exists")
 	_ = cmd.MarkFlagRequired("in")
 	_ = cmd.MarkFlagRequired("out")
 	_ = cmd.MarkFlagRequired("addr")
@@ -177,6 +177,9 @@ human-readable diff so you know which cosigners are still missing.`,
 			}
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
+			if hmacPass != "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: --hmac-passphrase is visible in process listings and shell history; prefer --hmac-passphrase-env in controlled scripts.")
+			}
 
 			svc := app.NewMultisigService(cfg)
 			_, err = svc.BroadcastMultisig(context.Background(), app.BroadcastMultisigOptions{
@@ -191,7 +194,7 @@ human-readable diff so you know which cosigners are still missing.`,
 	}
 	cmd.Flags().StringVar(&in, "in", "", "Path to the multisig transaction file")
 	cmd.Flags().StringVar(&format, "format", "auto", "Input format: auto|tron-json|monujo")
-	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for monujo-envelope HMAC integrity")
+	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for monujo-envelope HMAC integrity (unsafe: visible in process listings)")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive confirmation prompt")
 	_ = cmd.MarkFlagRequired("in")
@@ -225,6 +228,9 @@ No broadcast and no signing happen.`,
 			}
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
+			if hmacPass != "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: --hmac-passphrase is visible in process listings and shell history; prefer --hmac-passphrase-env in controlled scripts.")
+			}
 
 			svc := app.NewMultisigService(cfg)
 			_, err = svc.Info(context.Background(), app.InfoOptions{
@@ -237,7 +243,7 @@ No broadcast and no signing happen.`,
 	}
 	cmd.Flags().StringVar(&in, "in", "", "Path to the multisig transaction file")
 	cmd.Flags().StringVar(&format, "format", "auto", "Input format: auto|tron-json|monujo")
-	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for monujo-envelope HMAC integrity")
+	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for monujo-envelope HMAC integrity (unsafe: visible in process listings)")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable")
 	_ = cmd.MarkFlagRequired("in")
 	return cmd

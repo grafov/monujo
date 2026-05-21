@@ -8,6 +8,7 @@
 
 # Variables
 PRJ=monujo
+APP=monujo
 BINDIR=build
 
 PREFIX?=/usr/local/bin
@@ -28,10 +29,6 @@ all: build
 .PHONY: build
 build:
 	$(foreach dir,$(wildcard cmd/*), echo "$(dir) building..."; go build $(FLAGS) -o $(BINDIR)/ ./$(dir);)
-
-.PHONY: docker-build
-docker-build: # just set token into GITHUB_TOKEN environment variable
-	docker build -f Dockerfile -t local:$(PRJ) --secret id=github_token,env=GITHUB_TOcKEN .
 
 .PHONY: test
 test:
@@ -59,7 +56,7 @@ run-log: tidy build
 
 .PHONY: run-race
 run-race: tidy
-	go run -race $(LDFLAGS) ./cmd/$(APP)
+	go run -race $(FLAGS) ./cmd/$(APP)
 
 .PHONY: lint
 lint:
@@ -72,6 +69,9 @@ lint-fix:
 .PHONY: sec
 sec:
 	go tool gosec ./...
+
+.PHONY: check
+check: build test-race lint sec
 
 .PHONY: tidy
 tidy:

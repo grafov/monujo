@@ -46,16 +46,6 @@ go build -o build/monujo \
 Без `-ldflags` версия будет показана как `dev (unknown)` — это
 значения по умолчанию, заданные в `cmd/monujo/main.go`.
 
-### Сборка в Docker
-
-В Makefile есть цель `docker-build`, требующая `Dockerfile` (в
-текущей версии репозитория его нет — соберите образ собственным
-рецептом или используйте локальный бинарник).
-
-```bash
-GITHUB_TOKEN=... make docker-build
-```
-
 ## Установка
 
 В Makefile нет цели `install`, бинарник собирается в `build/`. Можно:
@@ -96,12 +86,13 @@ monujo [глобальные флаги] <группа> <подкоманда> [
 |-------------------------|-----------------------------------------------------------------------------------------------------------------|
 | `make build`            | Собирает все `cmd/*` в `build/`.                                                                                |
 | `make test`             | Запускает Ginkgo‑тесты по всему репозиторию.                                                                    |
-| `make test-race`        | Запускает тесты Tron‑пакета с детектором гонок.                                                                 |
-| `make test-coverage`    | Считает покрытие по `internal/tron`.                                                                            |
+| `make test-race`        | Запускает все Ginkgo‑тесты с детектором гонок.                                                                  |
+| `make test-coverage`    | Считает покрытие по всему репозиторию.                                                                          |
 | `make test-integration` | Включает интеграционные тесты Tron (`MONUJO_TRON_E2E=1`, тег `integration`). Требует доступа к настоящим узлам. |
 | `make lint`             | `golangci-lint run ./...`.                                                                                      |
 | `make lint-fix`         | То же, но с автофиксом.                                                                                         |
 | `make sec`              | `gosec ./...`.                                                                                                  |
+| `make check`            | Полный локальный gate: build, race‑tests, lint и sec.                                                           |
 | `make tidy`             | `go mod tidy`.                                                                                                  |
 | `make clean`            | `go clean` + удаление `build/`.                                                                                 |
 

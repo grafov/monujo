@@ -132,17 +132,18 @@ AES‑256‑GCM, записывает файл с правами `0600`. Тек�
 ### Использование
 
 ```bash
-monujo wallet create --name <ИМЯ> [--export-private-key]
+monujo wallet create --name <ИМЯ> [--export-private-key --allow-private-key-export]
 monujo --network shasta wallet create --name testhot
-monujo --output json wallet create --name myhot --export-private-key
+monujo --output json wallet create --name myhot --export-private-key --allow-private-key-export
 ```
 
 ### Флаги
 
 | Флаг | Тип | Обязательный | По умолчанию | Описание |
 |------|-----|--------------|--------------|----------|
-| `--name` | string | да | — | Имя кошелька. Превратится в файл `<safeName>.json` в `--keystore-dir`. Не может быть строкой, распознаваемой как валидный Tron base58-адрес (см. общие принципы). |
+| `--name` | string | да | — | Имя кошелька. Допустимы только ASCII буквы, цифры, `-` и `_`; имя не может быть валидным Tron base58-адресом. |
 | `--export-private-key` | bool | нет | `false` | Печатать сгенерированный приватный ключ один раз. **Опасно**: ключ окажется в выводе терминала или JSON‑потоке. |
+| `--allow-private-key-export` | bool | нет | `false` | Обязательное подтверждение риска для `--export-private-key`. |
 | `--overwrite` | bool | нет | `false` | **ОПАСНО**: разрешить замену уже существующего файла кошелька. Старый приватный ключ будет безвозвратно потерян. На TTY дополнительно запрашивается `[y/N]`; без TTY выполняется без доп. подтверждения. |
 | `--generate-passphrase` | bool | нет | `false` | Сгенерировать случайную парольную фразу и напечатать её один раз вместо интерактивного ввода. |
 | `--generate-words` | int | нет | `7` | Количество слов в сгенерированной фразе (≥ 4). |
@@ -174,10 +175,10 @@ Created wallet "myhot" -> TLcVUPa...
 Keystore: /home/user/.config/monujo/keystore
 ```
 
-С `--export-private-key`:
+С `--export-private-key --allow-private-key-export`:
 
 ```text
-$ monujo wallet create --name myhot --export-private-key
+$ monujo wallet create --name myhot --export-private-key --allow-private-key-export
 ...
 WARNING: printing private key is unsafe; anyone with this hex can spend funds.
 Private key (hex): 7b8a...c9d0
@@ -193,7 +194,7 @@ Private key (hex): 7b8a...c9d0
 }
 ```
 
-С `--export-private-key`:
+С `--export-private-key --allow-private-key-export`:
 
 ```json
 {
@@ -399,7 +400,7 @@ monujo --output json wallet check --addr myhot
 | Подкоманда | Локальные флаги                                            | Запрашивает пароль                                |
 |------------|------------------------------------------------------------|---------------------------------------------------|
 | `list`     | —                                                          | нет                                               |
-| `create`   | `--name`, `--export-private-key`, `--overwrite`, `--generate-*` | да (× 2 — новая фраза, либо генерация)         |
+| `create`   | `--name`, `--export-private-key`, `--allow-private-key-export`, `--overwrite`, `--generate-*` | да (× 2 — новая фраза, либо генерация)         |
 | `import`   | `--name`, `--key-hex`, `--overwrite`, `--generate-*`       | да (× 2 — новая фраза, либо генерация)            |
 | `import-external` | `--name`, `--addr`, `--overwrite` | нет |
 | `check`    | `--addr`                                                   | да (один раз — существующая фраза)                |

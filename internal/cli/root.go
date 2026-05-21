@@ -20,12 +20,13 @@ func SetBuildInfo(version, commit string) {
 }
 
 var (
-	networkFlag     string
-	outputFlag      string
-	httpURLFlag     string
-	grpcURLFlag     string
-	apiKeyFlag      string
-	keystoreDirFlag string
+	networkFlag      string
+	outputFlag       string
+	httpURLFlag      string
+	grpcURLFlag      string
+	grpcInsecureFlag bool
+	apiKeyFlag       string
+	keystoreDirFlag  string
 )
 
 // Execute runs the root command.
@@ -47,6 +48,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&outputFlag, "output", "table", "Output format: table or json")
 	root.PersistentFlags().StringVar(&httpURLFlag, "http-url", "", "Override TronGrid HTTP base URL")
 	root.PersistentFlags().StringVar(&grpcURLFlag, "grpc-url", "", "Override Tron gRPC address (host:port)")
+	root.PersistentFlags().BoolVar(&grpcInsecureFlag, "grpc-insecure", false, "Use plaintext gRPC (only for trusted local/private nodes)")
 	root.PersistentFlags().StringVar(&apiKeyFlag, "api-key", "", "TronGrid API key (or env MONUJO_TRONGRID_API_KEY)")
 	root.PersistentFlags().StringVar(&keystoreDirFlag, "keystore-dir", "", "Keystore directory (default: ~/.config/monujo/keystore)")
 
@@ -72,5 +74,10 @@ func loadConfig(_ *cobra.Command) (*config.Config, error) {
 	if key == "" {
 		key = config.TronGridAPIKeyFromEnv()
 	}
-	return config.Build(net, out, httpURLFlag, grpcURLFlag, key, keystoreDirFlag)
+	cfg, err := config.Build(net, out, httpURLFlag, grpcURLFlag, key, keystoreDirFlag)
+	if err != nil {
+		return nil, err
+	}
+	cfg.GRPCInsecure = grpcInsecureFlag
+	return cfg, nil
 }

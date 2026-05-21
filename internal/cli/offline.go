@@ -53,15 +53,16 @@ func resolveHMACPassphrase(direct, envName string) []byte {
 
 func newOfflineBuildCmd() *cobra.Command {
 	var (
-		from     string
-		to       string
-		amount   string
-		kind     string
-		note     string
-		out      string
-		hmacPass string
-		hmacEnv  string
-		yes      bool
+		from      string
+		to        string
+		amount    string
+		kind      string
+		note      string
+		out       string
+		hmacPass  string
+		hmacEnv   string
+		yes       bool
+		overwrite bool
 	)
 	cmd := &cobra.Command{
 		Use:   "build",
@@ -92,6 +93,9 @@ else as a name.`,
 			}
 			pass := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(pass)
+			if hmacPass != "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: --hmac-passphrase is visible in process listings and shell history; prefer --hmac-passphrase-env in controlled scripts.")
+			}
 
 			opts := app.BuildOptions{
 				Kind:           kind,
@@ -101,6 +105,7 @@ else as a name.`,
 				AmountUSDT:     amount,
 				Note:           note,
 				OutPath:        out,
+				Overwrite:      overwrite,
 				HMACPassphrase: pass,
 				IsTerminal:     stdinIsTerminal(),
 			}
@@ -117,9 +122,10 @@ else as a name.`,
 	cmd.Flags().StringVar(&kind, "kind", "trx", "Transfer kind: trx or usdt")
 	cmd.Flags().StringVar(&note, "note", "", "Optional human-readable note carried alongside the unsigned tx")
 	cmd.Flags().StringVar(&out, "out", "", "Path for the unsigned envelope JSON file (use - for stdout)")
-	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection (or use --hmac-passphrase-env)")
+	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection (unsafe: visible in process listings)")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable (e.g. MONUJO_HMAC)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Reserved for future build-time confirmations (currently unused)")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Replace --out if it already exists")
 	_ = cmd.MarkFlagRequired("from")
 	_ = cmd.MarkFlagRequired("to")
 	_ = cmd.MarkFlagRequired("amount")
@@ -144,13 +150,14 @@ else as a name.`,
 
 func newOfflineSignCmd() *cobra.Command {
 	var (
-		in       string
-		out      string
-		addr     string
-		hmacPass string
-		hmacEnv  string
-		yes      bool
-		force    bool
+		in        string
+		out       string
+		addr      string
+		hmacPass  string
+		hmacEnv   string
+		yes       bool
+		force     bool
+		overwrite bool
 	)
 	cmd := &cobra.Command{
 		Use:   "sign",
@@ -187,19 +194,17 @@ accidentally signing with a different cold wallet on the offline machine.`,
 			name := res.Name
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
-
-			pass, err := keystore.ReadPassphrase("Keystore passphrase: ")
-			if err != nil {
-				return err
+			if hmacPass != "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: --hmac-passphrase is visible in process listings and shell history; prefer --hmac-passphrase-env in controlled scripts.")
 			}
-			defer keystore.ZeroPassphrase(pass)
 
 			svc := app.NewOfflineService(cfg)
 			_, err = svc.Sign(app.SignOptions{
 				InPath:         in,
 				OutPath:        out,
 				WalletName:     name,
-				WalletPass:     pass,
+				ReadWalletPass: func() ([]byte, error) { return keystore.ReadPassphrase("Keystore passphrase: ") },
+				Overwrite:      overwrite,
 				HMACPassphrase: hmac,
 				Yes:            yes,
 				IsTerminal:     stdinIsTerminal(),
@@ -211,10 +216,11 @@ accidentally signing with a different cold wallet on the offline machine.`,
 	cmd.Flags().StringVar(&in, "in", "", "Path to the unsigned envelope JSON file")
 	cmd.Flags().StringVar(&out, "out", "", "Path for the signed envelope JSON file (use - for stdout)")
 	cmd.Flags().StringVar(&addr, "addr", "", "Keystore wallet name OR Tron base58 address (must map to a local wallet)")
-	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection")
+	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection (unsafe: visible in process listings)")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive confirmation prompt (for scripts)")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip wallet network mismatch check")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Replace --out if it already exists")
 	_ = cmd.MarkFlagRequired("in")
 	_ = cmd.MarkFlagRequired("out")
 	_ = cmd.MarkFlagRequired("addr")
@@ -241,6 +247,9 @@ to the configured Tron node via gRPC.`,
 			}
 			hmac := resolveHMACPassphrase(hmacPass, hmacEnv)
 			defer keystore.ZeroPassphrase(hmac)
+			if hmacPass != "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: --hmac-passphrase is visible in process listings and shell history; prefer --hmac-passphrase-env in controlled scripts.")
+			}
 
 			svc := app.NewOfflineService(cfg)
 			_, err = svc.Broadcast(context.Background(), app.BroadcastOptions{
@@ -253,7 +262,7 @@ to the configured Tron node via gRPC.`,
 		},
 	}
 	cmd.Flags().StringVar(&in, "in", "", "Path to the signed envelope JSON file")
-	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection")
+	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection (unsafe: visible in process listings)")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive confirmation prompt (for scripts)")
 	_ = cmd.MarkFlagRequired("in")

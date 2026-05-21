@@ -79,18 +79,19 @@ type UnsignedTransferPayload struct {
 // of the human-verifiable fields. The broadcaster MUST recompute fields from
 // RawDataHex and refuse to broadcast on mismatch.
 type SignedTransferPayload struct {
-	Version      int     `json:"version"`
-	Chain        ChainID `json:"chain"`
-	Kind         string  `json:"kind"`
-	From         string  `json:"from"`
-	To           string  `json:"to"`
-	Amount       string  `json:"amount"`
-	Contract     string  `json:"contract,omitempty"`
-	FeeLimitSun  int64   `json:"fee_limit_sun,omitempty"`
-	Expiration   int64   `json:"expiration_unix_ms"`
-	TxIDHex      string  `json:"tx_id_hex"`
-	RawDataHex   string  `json:"raw_data_hex"`
-	SignatureHex string  `json:"signature_hex"`
+	Version       int     `json:"version"`
+	Chain         ChainID `json:"chain"`
+	Kind          string  `json:"kind"`
+	From          string  `json:"from"`
+	To            string  `json:"to"`
+	Amount        string  `json:"amount"`
+	AmountMinimal string  `json:"amount_minimal"`
+	Contract      string  `json:"contract,omitempty"`
+	FeeLimitSun   int64   `json:"fee_limit_sun,omitempty"`
+	Expiration    int64   `json:"expiration_unix_ms"`
+	TxIDHex       string  `json:"tx_id_hex"`
+	RawDataHex    string  `json:"raw_data_hex"`
+	SignatureHex  string  `json:"signature_hex"`
 }
 
 // MultisigTransferPayload is the envelope for cooperative multi-signature
@@ -205,7 +206,7 @@ func MarshalSignedPayload(s SignedTransferPayload) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported payload version %d", s.Version)
 	}
 	switch {
-	case s.Kind == "", s.From == "", s.To == "", s.Amount == "":
+	case s.Kind == "", s.From == "", s.To == "", s.Amount == "", s.AmountMinimal == "":
 		return nil, fmt.Errorf("signed transfer: missing required fields")
 	case s.RawDataHex == "", s.SignatureHex == "":
 		return nil, fmt.Errorf("signed transfer: missing required fields")

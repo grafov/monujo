@@ -1,6 +1,6 @@
 # Monujo
 
-_In Open Source We Trust_
+> In Open Source We Trust
 
 Monujo is a minimal **Go CLI** tool for **Tron blockchain** and **USDT (TRC-20)** operations. It provides secure cryptocurrency management with multiple operational modes to suit different security requirements.
 
@@ -20,6 +20,90 @@ Designed for security-conscious users who need reliable cryptocurrency operation
 
 Minimal **Go CLI** for **Tron / TRC-20 / USDT**: watch-only queries for cold addresses (no keys), **wallet** lifecycle commands for the local encrypted keystore, **hot wallet** send flows for online operations, and an **air-gapped offline signer** (`monujo offline build|sign|broadcast`) for cold-storage workflows. Solana/BEP are out of scope.
 
+## Component interaction diagram
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor transparent
+
+actor User as user
+
+package "monujo" {
+
+  [CLI\ncobra commands] as cli
+
+  package "internal/app" {
+    [WatchService] as ws
+    [HotService] as hs
+    [OfflineService] as os
+    [MultisigService] as ms
+  }
+
+  package "internal" {
+    [config] as cfg
+    [keystore] as ks
+    [tron.ReadClient] as rc
+    [tron.WriteClient] as wc
+    [domain] as dom
+    [transfer] as xfer
+    [passphrase] as pp
+  }
+}
+
+database "Keystore files\n~/.config/monujo/" as kfiles
+cloud "TronGrid /\nTron full node" as tron
+collections "Transfer files\n*.unsigned.json\n*.signed.json" as tfiles
+
+user --> cli : invokes commands
+cli --> cfg : loadConfig(network, output, urls)
+
+cli --> ws : watch balance/txs/permissions
+ws --> rc : GetBalances, GetPermissions, ListUSDTTransfers
+rc --> tron : HTTP requests
+
+cli --> hs : wallet create/import/list
+hs --> ks : Store, LoadPrivateKey
+hs --> ws : PrintBalance (via ReadClient)
+ks --> kfiles : read/write encrypted files
+
+cli --> hs : hot send-trx/send-usdt
+hs --> ks : LoadPrivateKey
+hs --> wc : SendTRX, SendUSDT
+wc --> tron : gRPC requests
+
+cli --> os : offline build
+os --> rc : BuildUnsignedTRX/USDT
+os --> tron : HTTP ref-block
+os --> xfer : SealPayload
+os --> tfiles : write tx.unsigned.json
+
+cli --> os : offline sign
+os --> ks : LoadPrivateKey
+os --> xfer : Sign envelope
+os --> tfiles : read/write signed file
+
+cli --> os : offline broadcast
+os --> wc : BroadcastTransaction
+wc --> tron : gRPC broadcast
+
+cli --> ms : multisig cosign/info/broadcast
+ms --> ks : LoadPrivateKey
+ms --> xfer : envelope ops
+ms --> wc : SignWeight, Broadcast
+ms --> tfiles : read/write cosign files
+
+cfg ..> pp : passphrase defaults
+dom ..> ws : ParseTRXDecimal, FormatSunAsTRX
+dom ..> hs : amount parsing
+dom ..> os : amount parsing
+dom ..> ms : amount parsing
+xfer ..> os : Marshal/Seal/Open
+xfer ..> ms : Marshal/Seal/Open
+
+@enduml
+```
+
 ## Build
 
 ```bash
@@ -31,15 +115,16 @@ Requires Go 1.24+ (see `go.mod`).
 
 ## Configuration
 
-| Env / flag                               | Purpose                                                                                                                                                                                           |
-|------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Optional TronGrid API key (recommended for higher rate limits).                                                                                                                                   |
-| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Wallet files directory (default: `~/.config/monujo/keystore`).                                                                                                                                    |
-| `MONUJO_IMPORT_KEY`                      | Hex private key for `wallet import` if `--key-hex` is omitted.                                                                                                                                    |
-| `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).                                                                                                                                 |
-| `--output`                               | `table` or `json`.                                                                                                                                                                                |
-| `--http-url` / `--grpc-url`              | Override TronGrid HTTP base URL and gRPC `host:port`.                                                                                                                                             |
-| `--force`                                | On `hot balance`, `hot send-trx`, `hot send-usdt` only: skip the interactive confirmation when `--network` differs from networks already recorded in the wallet file (see below). |
+| Env / flag | Purpose |
+| --- | --- |
+| `MONUJO_TRONGRID_API_KEY` / `--api-key` | Optional TronGrid API key (recommended for higher rate limits). |
+| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Wallet files directory (default: `~/.config/monujo/keystore`). |
+| `MONUJO_IMPORT_KEY` | Hex private key for `wallet import` if `--key-hex` is omitted. |
+| `--network` | `mainnet` (default) or `shasta` (testnet; USDT contract differs). |
+| `--output` | `table` or `json`. |
+| `--http-url` / `--grpc-url` | Override TronGrid HTTP base URL and gRPC `host:port`. |
+| `--grpc-insecure` | Use plaintext gRPC only for trusted local/private nodes. |
+| `--force` | Skip network-mismatch confirmation on supported hot/offline operations. |
 
 ## Watch-only (cold address, online PC)
 
@@ -52,7 +137,7 @@ No private keys; uses public TronGrid HTTP APIs.
 
 ## Wallet management (no network)
 
-The `wallet` group manages the local encrypted keystore (`~/.config/monujo/keystore` by default) without touching the Tron network. The same files are consumed by both `hot` (online operations on this machine) and `offline sign` (air-gapped signing on a different machine). **Wallet names** must not be valid Tron base58 addresses (the CLI rejects them on create/import) so they are not confused with `--addr` / `--from` / `--to` values elsewhere.
+The `wallet` group manages the local encrypted keystore (`~/.config/monujo/keystore` by default) without touching the Tron network. The same files are consumed by both `hot` (online operations on this machine) and `offline sign` (air-gapped signing on a different machine). **Wallet names** must use only ASCII letters, digits, `-` and `_`, and must not be valid Tron base58 addresses, so they cannot collide on disk or be confused with `--addr` / `--from` / `--to` values elsewhere.
 
 List wallets (name, type `local`/`external`, address, recorded networks):
 
@@ -64,21 +149,21 @@ List wallets (name, type `local`/`external`, address, recorded networks):
 
 ```bash
 ./build/monujo wallet create --name myhot [--network shasta]
-# optional: --export-private-key (prints raw hex once; unsafe)
-# JSON with optional key field: --output json --export-private-key
+# optional: --export-private-key --allow-private-key-export (prints raw hex once; unsafe)
+# JSON with optional key field: --output json --export-private-key --allow-private-key-export
 # optional: --generate-passphrase (see "Passphrase generator" below)
 ```
 
 A built-in passphrase generator is available as the standalone `monujo tool genpass` command and as `--generate-passphrase` on `wallet create` / `wallet import`. Dictionaries: `english` (EFF Long, default), `english-short`, `esperanto-x` (ASCII), `esperanto` (with diacritics), `russian` (Cyrillic). See [docs/06-keystore.md](docs/06-keystore.md) §"Генератор парольных фраз" for details, including the warnings printed for non-ASCII dictionaries and the exact NFKC semantics.
 
-2. **Import** a 64-hex-character secp256k1 private key into an encrypted file (Argon2id + AES-256-GCM; legacy scrypt files from pre-v2 releases are auto-migrated on first unlock):
+1. **Import** a 64-hex-character secp256k1 private key into an encrypted file (Argon2id + AES-256-GCM; legacy scrypt files from pre-v2 releases are auto-migrated on first unlock):
 
 ```bash
 ./build/monujo wallet import --name myhot --key-hex <64_HEX_CHARS>
 # passphrase prompts; or set MONUJO_IMPORT_KEY instead of --key-hex
 ```
 
-3. **Import external** — save a Tron base58 address under a name (no private key; shown as `external` in `wallet list`). Use for balance/recipient/build aliases; not for signing.
+1. **Import external** — save a Tron base58 address under a name (no private key; shown as `external` in `wallet list`). Use for balance/recipient/build aliases; not for signing.
 
 ```bash
 ./build/monujo wallet import-external --name custodian --addr <TRON_BASE58>
@@ -98,30 +183,30 @@ If you run **`hot balance`**, **`hot send-trx`**, or **`hot send-usdt`** with a 
 
 (On testnet, you can use a [Shasta faucet](https://www.trongrid.io/faucet) instead.)
 
-2. **Balance** (no passphrase needed; wallet name resolves via keystore metadata — including **external** address-only aliases — or pass any raw base58 address; then the same public queries as `watch balance`):
+1. **Balance** (no passphrase needed; wallet name resolves via keystore metadata — including **external** address-only aliases — or pass any raw base58 address; then the same public queries as `watch balance`):
 
 ```bash
 ./build/monujo hot balance --addr myhot
 ```
 
-3. **Send TRX** (native, amount in sun/TRX decimals):
+1. **Send TRX** (native, amount in sun/TRX decimals):
 
 ```bash
 ./build/monujo hot send-trx --from myhot --to <ADDR> --amount 12.5
 ```
 
-4. **Send USDT** (TRC-20; mainnet contract is fixed in code):
+1. **Send USDT** (TRC-20; mainnet contract is fixed in code):
 
 ```bash
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Hot sends use **gRPC** to a Tron full node (default `grpc.trongrid.io:50051` on mainnet) and sign in-process. You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
+Hot sends use **gRPC over TLS** to a Tron full node (default `grpc.trongrid.io:50051` on mainnet) and sign in-process. Use `--grpc-insecure` only for trusted local/private nodes. You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
 
 ## Security notes
 
 - This is **not** a hardware wallet. Threat model: trusted build, trusted machine, encrypted keystore file permissions (`0600`), strong passphrase, and optional TronGrid API key for reliability.
-- **Do not** commit keystores, passphrases, or hex keys. `wallet import` supports env `MONUJO_IMPORT_KEY` for scripting — prefer interactive `--key-hex` or env only in controlled environments. Avoid `wallet create --export-private-key` unless you accept the risk of exposing the key in the terminal or JSON output.
+- **Do not** commit keystores, passphrases, or hex keys. `wallet import` supports env `MONUJO_IMPORT_KEY` for scripting, but env and `--key-hex` can leak through process metadata. Avoid `wallet create --export-private-key --allow-private-key-export` unless you accept the risk of exposing the key in the terminal or JSON output.
 - Amount parsing avoids `float64` for token math; USDT/TRX amounts are handled as integers / decimals via strings.
 - USDT contract addresses: **mainnet** `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`; **Shasta** uses the test token address baked into `internal/tron/constants.go` (not official mainnet Tether).
 
@@ -150,9 +235,11 @@ For cold-storage workflows the keystore can live exclusively on an **offline** m
 
 Both TRX (`--kind trx`) and USDT (`--kind usdt`) are supported. Tron's `ref_block` / `expiration` give a ~60 second window between `build` and `broadcast`; an expired file must be rebuilt online.
 
+`offline build`, `offline sign`, and `multisig cosign` refuse to replace an existing `--out` file unless `--overwrite` is passed.
+
 Two layers protect the file in transit:
 
-- **Visual confirmation.** Before signing and before broadcasting, monujo recomputes all human-readable fields (`from`, `to`, `amount`, `contract`, `expiration`, `tx_id`) from the embedded `raw_data` and prints them along with the file SHA-256, then asks `[y/N]` (use `--yes` for scripts).
+- **Visual confirmation.** Before signing and before broadcasting, monujo recomputes all human-readable fields (`from`, `to`, `amount`, `amount_minimal`, `contract`, `expiration`, `tx_id`) from the embedded `raw_data` and prints them along with the file SHA-256, then asks `[y/N]` (use `--yes` for scripts).
 - **Optional HMAC-SHA256.** Pass `--hmac-passphrase` (or `--hmac-passphrase-env`) on both ends; the key is derived via scrypt and the envelope is rejected on mismatch.
 
 See [docs/10-offline-commands.md](docs/10-offline-commands.md) for a step-by-step walk-through and the on-disk envelope format.

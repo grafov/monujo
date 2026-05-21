@@ -186,6 +186,9 @@ func (h *HotService) SendTRX(ctx context.Context, name, to string, amountTRX str
 	if err != nil {
 		return err
 	}
+	if amountSun <= 0 {
+		return fmt.Errorf("amount must be positive")
+	}
 	if err := tron.ValidateBase58Address(to); err != nil {
 		return err
 	}

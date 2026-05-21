@@ -11,7 +11,6 @@ import (
 	"io"
 	"math/big"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/common"
@@ -124,6 +123,8 @@ type CosignOptions struct {
 	OutFormat      MultisigFormat // optional override for output format only
 	WalletName     string
 	WalletPass     []byte
+	ReadWalletPass func() ([]byte, error)
+	Overwrite      bool
 	HMACPassphrase []byte
 	Yes            bool
 	IsTerminal     bool
@@ -152,13 +153,20 @@ func (m *MultisigService) Cosign(opts CosignOptions) (transfer.FileFingerprint, 
 	if err != nil {
 		return zero, err
 	}
+	signerAddr, err := localWalletAddress(m.ks, opts.WalletName)
+	if err != nil {
+		return in.Fingerprint, err
+	}
 
 	summary, summaryErr := tron.DecodeRawDataSummary(in.RawDataHex)
-	displayKind, displayFields, warnings := m.renderSummary(in, summary, summaryErr)
+	displayKind, displayFields, warnings, err := m.renderSummary(in, summary, summaryErr)
+	if err != nil {
+		return in.Fingerprint, err
+	}
 
-	m.printCosignConfirm(in, displayKind, displayFields, warnings, opts.InPath)
+	m.printCosignConfirm(in, signerAddr, displayKind, displayFields, warnings, opts.InPath)
 	if !opts.Yes {
-		if err := m.requireConfirm(); err != nil {
+		if err := m.requireConfirm(opts.IsTerminal); err != nil {
 			return in.Fingerprint, err
 		}
 	}
@@ -180,7 +188,13 @@ func (m *MultisigService) Cosign(opts CosignOptions) (transfer.FileFingerprint, 
 			opts.WalletName, recorded, netForKS)
 	}
 
-	pk, err := keystore.LoadPrivateKey(m.ks, opts.WalletName, opts.WalletPass)
+	walletPass, cleanupPass, err := readSignPassphrase(opts.WalletPass, opts.ReadWalletPass)
+	if err != nil {
+		return in.Fingerprint, err
+	}
+	defer cleanupPass()
+
+	pk, err := keystore.LoadPrivateKey(m.ks, opts.WalletName, walletPass)
 	if err != nil {
 		return in.Fingerprint, err
 	}
@@ -209,7 +223,7 @@ func (m *MultisigService) Cosign(opts CosignOptions) (transfer.FileFingerprint, 
 	if err != nil {
 		return in.Fingerprint, err
 	}
-	outFP, err := m.writeFile(opts.OutPath, outBlob)
+	outFP, err := m.writeFile(opts.OutPath, outBlob, opts.Overwrite)
 	if err != nil {
 		return outFP, err
 	}
@@ -322,10 +336,13 @@ func (m *MultisigService) BroadcastMultisig(ctx context.Context, opts BroadcastM
 	}
 
 	summary, summaryErr := tron.DecodeRawDataSummary(in.RawDataHex)
-	displayKind, displayFields, warnings := m.renderSummary(in, summary, summaryErr)
+	displayKind, displayFields, warnings, err := m.renderSummary(in, summary, summaryErr)
+	if err != nil {
+		return zero, err
+	}
 	m.printBroadcastConfirm(in, displayKind, displayFields, warnings, opts.InPath)
 	if !opts.Yes {
-		if err := m.requireConfirm(); err != nil {
+		if err := m.requireConfirm(opts.IsTerminal); err != nil {
 			return zero, err
 		}
 	}
@@ -468,20 +485,44 @@ func buildMonujoFromTronJSON(in MultisigInput, cfg *config.Config) transfer.Mult
 	return pl
 }
 
+func localWalletAddress(keystoreDir, name string) (string, error) {
+	items, err := keystore.ListWallets(keystoreDir)
+	if err != nil {
+		return "", err
+	}
+	for _, w := range items {
+		if w.Name != name {
+			continue
+		}
+		if w.External {
+			return "", fmt.Errorf("wallet %q is external (address-only); multisig cosign needs a local encrypted keystore file", name)
+		}
+		return w.Address, nil
+	}
+	return "", fmt.Errorf("wallet %q not found in keystore %q", name, keystoreDir)
+}
+
+func permissionIDForInput(in MultisigInput) int32 {
+	if in.Envelope.PermissionID != 0 {
+		return in.Envelope.PermissionID
+	}
+	return tron.DecodeRawDataPermissionID(in.RawDataHex)
+}
+
 // renderSummary pretty-prints the relevant fields of the incoming
 // transaction. When the summary decoder succeeded and the kind is TRX or
 // TRC-20, display fields are extracted from raw_data and strict-cross-
 // checked against any monujo envelope fields. When decoding failed (e.g.
 // an exchange contract) the function returns a warning and no display
 // values so the caller can show a generic "forward-as-is" prompt.
-func (m *MultisigService) renderSummary(in MultisigInput, s tron.RawDataSummary, sErr error) (kind string, fields map[string]string, warnings []string) {
+func (m *MultisigService) renderSummary(in MultisigInput, s tron.RawDataSummary, sErr error) (kind string, fields map[string]string, warnings []string, err error) {
 	fields = map[string]string{}
 	if sErr != nil {
 		warnings = append(warnings, fmt.Sprintf("raw_data contract not decoded: %v (forwarding signatures anyway)", sErr))
 		if in.Format == MultisigFormatMonujo && in.Envelope.Kind == transfer.KindUnknownContract {
-			return in.Envelope.Kind, fields, warnings
+			return in.Envelope.Kind, fields, warnings, nil
 		}
-		return transfer.KindUnknownContract, fields, warnings
+		return transfer.KindUnknownContract, fields, warnings, nil
 	}
 	kind = s.Kind
 	fields["from"] = s.From
@@ -499,10 +540,10 @@ func (m *MultisigService) renderSummary(in MultisigInput, s tron.RawDataSummary,
 	fields["expiration"] = tron.FormatExpirationISO(s.ExpirationMs)
 	if in.Format == MultisigFormatMonujo && in.Envelope.Chain != "" {
 		if err := verifyMultisigEnvelopeAgainstSummary(in.Envelope, s); err != nil {
-			warnings = append(warnings, err.Error())
+			return kind, fields, warnings, err
 		}
 	}
-	return kind, fields, warnings
+	return kind, fields, warnings, nil
 }
 
 // verifyMultisigEnvelopeAgainstSummary checks that a monujo-format input
@@ -600,7 +641,7 @@ func base58ApprovedList(raw [][]byte) []string {
 
 // writeFile writes blob to path ("-" → stdout) and returns the fingerprint
 // of the bytes that hit disk.
-func (m *MultisigService) writeFile(path string, blob []byte) (transfer.FileFingerprint, error) {
+func (m *MultisigService) writeFile(path string, blob []byte, overwrite bool) (transfer.FileFingerprint, error) {
 	fp := transfer.FileFingerprint{}
 	if path == "" {
 		return fp, errors.New("output path must not be empty (use \"-\" for stdout)")
@@ -611,8 +652,7 @@ func (m *MultisigService) writeFile(path string, blob []byte) (transfer.FileFing
 		}
 		_, _ = m.stdout().Write([]byte("\n"))
 	} else {
-		clean := filepath.Clean(path)
-		if err := os.WriteFile(clean, blob, 0o600); err != nil { //nolint:gosec // path is a user-supplied CLI argument like "tx.signed.json"; writing to it is the whole point
+		if err := writeOutputFile(path, blob, overwrite); err != nil {
 			return fp, fmt.Errorf("write %s: %w", path, err)
 		}
 	}
@@ -620,7 +660,7 @@ func (m *MultisigService) writeFile(path string, blob []byte) (transfer.FileFing
 }
 
 // printCosignConfirm prints the to-be-signed summary to stderr.
-func (m *MultisigService) printCosignConfirm(in MultisigInput, kind string, fields map[string]string, warnings []string, srcPath string) {
+func (m *MultisigService) printCosignConfirm(in MultisigInput, signerAddr string, kind string, fields map[string]string, warnings []string, srcPath string) {
 	w := m.stderr()
 	fmt.Fprintf(w, "\n=== about to COSIGN multisig transfer ===\n")
 	fmt.Fprintf(w, "  source file:   %s\n", srcPath)
@@ -628,6 +668,8 @@ func (m *MultisigService) printCosignConfirm(in MultisigInput, kind string, fiel
 	fmt.Fprintf(w, "  file SHA-256:  %s\n", in.Fingerprint.SHA256Hex)
 	fmt.Fprintf(w, "  hmac checked:  %v\n", in.HMACChecked)
 	fmt.Fprintf(w, "  tx_id:         %s\n", in.TxIDHex)
+	fmt.Fprintf(w, "  permission_id: %d\n", permissionIDForInput(in))
+	fmt.Fprintf(w, "  signer:        %s\n", signerAddr)
 	fmt.Fprintf(w, "  existing sigs: %d\n", len(in.SignaturesHex))
 	fmt.Fprintf(w, "  kind:          %s\n", kind)
 	for _, k := range []string{"from", "to", "amount", "amount_minimal", "contract", "fee_limit_sun", "expiration"} {
@@ -662,8 +704,8 @@ func (m *MultisigService) printBroadcastConfirm(in MultisigInput, kind string, f
 
 // requireConfirm mirrors OfflineService.requireConfirm; kept private so
 // the two services print the same prompt without an accidental drift.
-func (m *MultisigService) requireConfirm() error {
-	if !m.isTerminal(true) {
+func (m *MultisigService) requireConfirm(isTerminal bool) error {
+	if !m.isTerminal(isTerminal) {
 		return errors.New("aborted: refused to act without --yes on a non-interactive stdin")
 	}
 	fmt.Fprint(m.stderr(), "Continue? [y/N]: ")

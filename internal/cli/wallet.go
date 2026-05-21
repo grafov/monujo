@@ -18,7 +18,10 @@ import (
 func rejectAddressLikeWalletName(name string) error {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
-		return nil
+		return fmt.Errorf("wallet name must not be empty")
+	}
+	if err := keystore.ValidateWalletName(trimmed); err != nil {
+		return err
 	}
 	if looksLikeTronAddress(trimmed) {
 		return fmt.Errorf("wallet name %q looks like a Tron base58 address; choose a non-address name to avoid --addr/--from/--to ambiguity", trimmed)
@@ -120,6 +123,7 @@ func newWalletListCmd() *cobra.Command {
 func newWalletCreateCmd() *cobra.Command {
 	var name string
 	var exportPriv bool
+	var allowExport bool
 	var overwrite bool
 	var gen generateFlags
 	cmd := &cobra.Command{
@@ -136,6 +140,9 @@ func newWalletCreateCmd() *cobra.Command {
 			if err := confirmWalletOverwrite(cfg, name, overwrite); err != nil {
 				return err
 			}
+			if exportPriv && !allowExport {
+				return fmt.Errorf("--export-private-key is unsafe; pass --allow-private-key-export to acknowledge the risk")
+			}
 			pass, err := obtainNewKeystorePassphrase(cmd.ErrOrStderr(), gen, "New keystore passphrase: ")
 			if err != nil {
 				return err
@@ -148,6 +155,7 @@ func newWalletCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Wallet name (file name in keystore)")
 	cmd.Flags().BoolVar(&exportPriv, "export-private-key", false, "Print raw hex private key once (unsafe)")
+	cmd.Flags().BoolVar(&allowExport, "allow-private-key-export", false, "Acknowledge that --export-private-key exposes spend authority")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false,
 		"DANGEROUS: replace existing wallet file; the previous private key is permanently lost")
 	registerGenerateFlags(cmd, &gen)
@@ -174,6 +182,11 @@ func newWalletImportCmd() *cobra.Command {
 			key := strings.TrimSpace(keyHex)
 			if key == "" {
 				key = strings.TrimSpace(os.Getenv("MONUJO_IMPORT_KEY"))
+				if key != "" {
+					fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: MONUJO_IMPORT_KEY can leak through process environments; use only in controlled scripts.")
+				}
+			} else {
+				fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: --key-hex is visible in process listings and shell history; prefer an interactive air-gapped import.")
 			}
 			if key == "" {
 				return errNeedKeyOrEnv
@@ -191,7 +204,7 @@ func newWalletImportCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Wallet name (file name in keystore)")
-	cmd.Flags().StringVar(&keyHex, "key-hex", "", "64-character hex private key (optional if MONUJO_IMPORT_KEY is set)")
+	cmd.Flags().StringVar(&keyHex, "key-hex", "", "64-character hex private key (unsafe: visible in process listings; optional if MONUJO_IMPORT_KEY is set)")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false,
 		"DANGEROUS: replace existing wallet file; the previous private key is permanently lost")
 	registerGenerateFlags(cmd, &gen)
