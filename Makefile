@@ -64,9 +64,10 @@ lint:
 lint-fix:
 	go tool golangci-lint run -v --fix ./...
 
-.PHONY: sec
-sec:
+.PHONY: security
+security:
 	go tool gosec ./...
+	go tool govulncheck ./...
 
 .PHONY: check
 check: build test-race lint sec
