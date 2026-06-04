@@ -105,7 +105,7 @@ var _ = Describe("Offline", func() {
 		})
 
 		It("returns a payload with a hex-encoded raw_data, txid, and human fields", func() {
-			pl, err := tron.BuildUnsignedTRX(context.Background(), wc, testFromAddr, testToAddr, 1_500_000, "lunch")
+			pl, err := tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, testFromAddr, testToAddr, 1_500_000, "lunch")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pl.Kind).To(Equal(transfer.KindTRX))
 			Expect(pl.From).To(Equal(testFromAddr))
@@ -119,15 +119,15 @@ var _ = Describe("Offline", func() {
 		})
 
 		It("rejects invalid base58 from-address before any RPC", func() {
-			_, err := tron.BuildUnsignedTRX(context.Background(), wc, "not-base58", testToAddr, 1, "")
+			_, err := tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, "not-base58", testToAddr, 1, "")
 			Expect(err).To(HaveOccurred())
 			Expect(calls.createTxCalls).To(BeEmpty())
 		})
 
 		It("rejects non-positive amount", func() {
-			_, err := tron.BuildUnsignedTRX(context.Background(), wc, testFromAddr, testToAddr, 0, "")
+			_, err := tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, testFromAddr, testToAddr, 0, "")
 			Expect(err).To(HaveOccurred())
-			_, err = tron.BuildUnsignedTRX(context.Background(), wc, testFromAddr, testToAddr, -1, "")
+			_, err = tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, testFromAddr, testToAddr, -1, "")
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -156,7 +156,7 @@ var _ = Describe("Offline", func() {
 		})
 
 		It("populates Contract and FeeLimitSun from cfg", func() {
-			pl, err := tron.BuildUnsignedUSDT(context.Background(), wc, testFromAddr, testToAddr, mustParseBigInt("12345000"), "")
+			pl, err := tron.BuildUnsignedUSDT(context.Background(), wc, config.NetworkMainnet, 100_000_000, testFromAddr, testToAddr, mustParseBigInt("12345000"), "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pl.Kind).To(Equal(transfer.KindTRC20USDT))
 			Expect(pl.Contract).To(Equal(tron.MainnetUSDTContract))

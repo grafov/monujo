@@ -58,7 +58,7 @@ type MultisigService struct {
 	cfg *config.Config
 	ks  string
 
-	onlineWriter func() (*tron.WriteClient, func(), error)
+	onlineWriter func() (tron.TransactionWriter, func(), error)
 
 	confirmIn        io.Reader
 	confirmOut       io.Writer
@@ -71,11 +71,11 @@ func NewMultisigService(cfg *config.Config) *MultisigService {
 	return &MultisigService{cfg: cfg, ks: cfg.KeystoreDir}
 }
 
-func (m *MultisigService) writer() (*tron.WriteClient, func(), error) {
+func (m *MultisigService) writer() (tron.TransactionWriter, func(), error) {
 	if m.onlineWriter != nil {
 		return m.onlineWriter()
 	}
-	wc, err := tron.NewWriteClientFromConfig(m.cfg)
+	wc, err := tron.NewTransactionWriterFromConfig(m.cfg)
 	if err != nil {
 		return nil, func() {}, err
 	}

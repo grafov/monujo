@@ -43,6 +43,16 @@ const (
 	OutputJSON OutputFormat = "json"
 )
 
+// WriteTransport selects how monujo talks to a Tron full node for writes.
+type WriteTransport string
+
+const (
+	// WriteTransportREST uses HTTPS Wallet HTTP API (default, TronGrid-safe).
+	WriteTransportREST WriteTransport = "rest"
+	// WriteTransportGRPC uses gotron-sdk gRPC (opt-in; often plaintext).
+	WriteTransportGRPC WriteTransport = "grpc"
+)
+
 // Config aggregates CLI flags and resolved endpoints.
 type Config struct {
 	Network        Network
@@ -51,6 +61,7 @@ type Config struct {
 	TronGridAPIKey string
 	Output         OutputFormat
 	KeystoreDir    string
+	WriteTransport WriteTransport
 	GRPCInsecure   bool
 	// DefaultFeeLimitSun is the maximum fee (sun) for TRC-20 contract calls.
 	DefaultFeeLimitSun int64
@@ -90,6 +101,28 @@ func ParseNetwork(s string) (Network, error) {
 		return NetworkShasta, nil
 	default:
 		return "", fmt.Errorf("unknown network %q (use mainnet or shasta)", s)
+	}
+}
+
+// ParseWriteTransport parses --write-transport.
+func ParseWriteTransport(s string) (WriteTransport, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "rest", "":
+		return WriteTransportREST, nil
+	case "grpc":
+		return WriteTransportGRPC, nil
+	default:
+		return "", fmt.Errorf("unknown write transport %q (use rest or grpc)", s)
+	}
+}
+
+// IsTronGridGRPC reports whether addr is a known public TronGrid gRPC endpoint.
+func IsTronGridGRPC(addr string) bool {
+	switch strings.TrimSpace(addr) {
+	case defaultGRPCMainnet, defaultGRPCShasta:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -138,6 +171,7 @@ func Build(network Network, output OutputFormat, httpOverride, grpcOverride, api
 		TronGridAPIKey:     strings.TrimSpace(apiKey),
 		Output:             output,
 		KeystoreDir:        keystoreDir,
+		WriteTransport:     WriteTransportREST,
 		GRPCInsecure:       false,
 		DefaultFeeLimitSun: defaultFeeLimitSun,
 	}, nil

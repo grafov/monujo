@@ -12,9 +12,10 @@
 |------|---------------------|--------------|-----------|
 | `--network <id>` | — | `mainnet` | Целевая сеть TRON: `mainnet` или `shasta`. |
 | `--output <fmt>` | — | `table` | Формат вывода: `table` (для человека) или `json`. |
-| `--http-url <url>` | — | по сети | Переопределить базовый URL HTTP API TronGrid. |
-| `--grpc-url <host:port>` | — | по сети | Переопределить адрес gRPC полного узла. |
-| `--grpc-insecure` | — | `false` | Использовать plaintext gRPC только для доверенных локальных/приватных узлов. |
+| `--http-url <url>` | — | по сети | Базовый URL HTTPS (чтение и запись при `rest`). |
+| `--write-transport <t>` | — | `rest` | Транспорт записи: `rest` (HTTPS) или `grpc` (opt-in). |
+| `--grpc-url <host:port>` | — | по сети | Адрес gRPC; только с `--write-transport grpc`. |
+| `--grpc-insecure` | — | `false` | Plaintext gRPC (нужен для TronGrid и большинства full node). |
 | `--api-key <key>` | `MONUJO_TRONGRID_API_KEY` | пусто | API‑ключ TronGrid для повышенных лимитов запросов. |
 | `--keystore-dir <path>` | `MONUJO_KEYSTORE_DIR` | `~/.config/monujo/keystore` | Каталог зашифрованных файлов кошельков. |
 | `--version` | — | — | Показать версию и git‑коммит, заложенные при сборке. |
@@ -69,25 +70,36 @@ keystore сеть всегда хранится в нижнем регистре
 - `https://api.trongrid.io` (mainnet)
 - `https://api.shasta.trongrid.io` (shasta)
 
-Используется для `watch balance`, `watch txs`, `hot balance`. Если
+Используется для `watch balance`, `watch txs`, `hot balance`, а также
+для операций записи при `--write-transport rest` (`/wallet/*`). Если
 указать пустую строку — действует значение по умолчанию.
 
 Ведущий и завершающий пробелы обрезаются, завершающий `/` тоже
 обрезается. Никакой авто‑префиксации `https://` нет — указывайте URL
 полностью.
 
-### `--grpc-url`
+### `--write-transport`
 
-Тип: строка `host:port`. По умолчанию:
+Тип: строка. Допустимые значения:
+
+- `rest` (по умолчанию) — HTTPS Wallet HTTP API TronGrid (`/wallet/createtransaction`, `/wallet/broadcasthex`, …).
+- `grpc` — gotron-sdk к `--grpc-url` (legacy, своя нода, отладка).
+
+Ошибка: `unknown write transport "..." (use rest or grpc)`.
+
+### `--grpc-url` и `--grpc-insecure`
+
+Имеют смысл только при `--write-transport grpc`.
+
+По умолчанию:
 
 - `grpc.trongrid.io:50051` (mainnet)
 - `grpc.shasta.trongrid.io:50051` (shasta)
 
-Используется для всех операций, которые подписывают и рассылают
-транзакции (`hot send-trx`, `hot send-usdt`).
-Соединение использует TLS по умолчанию. Для доверенного локального
-или приватного узла можно явно передать `--grpc-insecure`, чтобы
-использовать plaintext gRPC.
+Публичный TronGrid gRPC работает **без TLS**. При
+`--write-transport grpc --grpc-insecure` на этих хостах CLI печатает
+предупреждение в stderr. Для обычной работы с TronGrid используйте
+дефолтный `rest`.
 
 ### `--api-key`
 

@@ -107,7 +107,7 @@ monujo multisig info --in tx.cosigned.json [--format ...] [--hmac-*]
 Online. Pre-check через `GetTransactionSignWeight` — если
 `current_weight < threshold`, broadcast **не** выполняется, печатается
 diff (кто уже подписал, кого ещё не хватает). Иначе транзакция
-отправляется в сеть через стандартный `WriteClient`.
+отправляется в сеть через транспорт записи (по умолчанию HTTPS REST).
 
 ```bash
 monujo multisig broadcast \
@@ -135,7 +135,7 @@ multisig, где подписей несколько и файл бегает м
 - Нет поддержки `UpdateAccountPermissionContract` — настройку permissions
   делает TronLink/TronWeb/другой инструмент.
 - Не появляется новый HTTP-провайдер/gRPC-клиент: используются те же
-  `ReadClient` и `WriteClient`, что и для `watch`, `hot`, `offline`.
+  `ReadClient` и транспорт записи (`rest` или opt-in `grpc`), как для `watch`, `hot`, `offline`.
 - `offline build/sign/broadcast` **не** изменяются — они по-прежнему
   ровно про 1-of-1 транзакции.
 

@@ -18,8 +18,10 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/grafov/monujo/internal/config"
+	"github.com/grafov/monujo/internal/tron"
 	"github.com/spf13/cobra"
 )
 
@@ -35,13 +37,14 @@ func SetBuildInfo(version, commit string) {
 }
 
 var (
-	networkFlag      string
-	outputFlag       string
-	httpURLFlag      string
-	grpcURLFlag      string
-	grpcInsecureFlag bool
-	apiKeyFlag       string
-	keystoreDirFlag  string
+	networkFlag        string
+	outputFlag         string
+	httpURLFlag        string
+	grpcURLFlag        string
+	grpcInsecureFlag   bool
+	writeTransportFlag string
+	apiKeyFlag         string
+	keystoreDirFlag    string
 )
 
 // Execute runs the root command.
@@ -61,9 +64,10 @@ func newRootCmd() *cobra.Command {
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.PersistentFlags().StringVar(&networkFlag, "network", "mainnet", "Tron network: mainnet or shasta")
 	root.PersistentFlags().StringVar(&outputFlag, "output", "table", "Output format: table or json")
-	root.PersistentFlags().StringVar(&httpURLFlag, "http-url", "", "Override TronGrid HTTP base URL")
-	root.PersistentFlags().StringVar(&grpcURLFlag, "grpc-url", "", "Override Tron gRPC address (host:port)")
-	root.PersistentFlags().BoolVar(&grpcInsecureFlag, "grpc-insecure", false, "Use plaintext gRPC (only for trusted local/private nodes)")
+	root.PersistentFlags().StringVar(&httpURLFlag, "http-url", "", "Override TronGrid HTTP base URL (read + default write transport)")
+	root.PersistentFlags().StringVar(&writeTransportFlag, "write-transport", "rest", "Write transport: rest (HTTPS, default) or grpc (opt-in)")
+	root.PersistentFlags().StringVar(&grpcURLFlag, "grpc-url", "", "Override Tron gRPC address (host:port); used only with --write-transport grpc")
+	root.PersistentFlags().BoolVar(&grpcInsecureFlag, "grpc-insecure", false, "Use plaintext gRPC (with --write-transport grpc; required for TronGrid and most full nodes)")
 	root.PersistentFlags().StringVar(&apiKeyFlag, "api-key", "", "TronGrid API key (or env MONUJO_TRONGRID_API_KEY)")
 	root.PersistentFlags().StringVar(&keystoreDirFlag, "keystore-dir", "", "Keystore directory (default: ~/.config/monujo/keystore)")
 
@@ -89,10 +93,16 @@ func loadConfig(_ *cobra.Command) (*config.Config, error) {
 	if key == "" {
 		key = config.TronGridAPIKeyFromEnv()
 	}
+	wt, err := config.ParseWriteTransport(writeTransportFlag)
+	if err != nil {
+		return nil, err
+	}
 	cfg, err := config.Build(net, out, httpURLFlag, grpcURLFlag, key, keystoreDirFlag)
 	if err != nil {
 		return nil, err
 	}
+	cfg.WriteTransport = wt
 	cfg.GRPCInsecure = grpcInsecureFlag
+	tron.WarnTronGridPlaintextGRPC(os.Stderr, cfg)
 	return cfg, nil
 }

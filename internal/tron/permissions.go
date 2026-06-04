@@ -139,7 +139,7 @@ func (r *ReadClient) GetPermissions(ctx context.Context, addr string) (*AccountP
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("trongrid permissions: HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return nil, fmt.Errorf("trongrid permissions: HTTP %d: %s", resp.StatusCode, truncate(string(body)))
 	}
 	return parsePermissionsResponse(addr, body)
 }

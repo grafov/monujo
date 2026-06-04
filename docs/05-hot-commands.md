@@ -3,7 +3,7 @@
 Группа `hot` объединяет **онлайн-операции** с уже существующим
 кошельком из локального keystore: проверка баланса, отправка TRX и USDT.
 Все команды этой группы делают
-сетевые вызовы (HTTP к TronGrid и/или gRPC к полному узлу).
+сетевые вызовы (HTTPS TronGrid: чтение `/v1/*`, запись `/wallet/*` по умолчанию).
 
 > Lifecycle keystore-файла (создание, импорт, список) живёт в
 > отдельной группе [`monujo wallet`](11-wallet-commands.md) и сетевых
@@ -140,9 +140,9 @@ monujo hot send-trx --from <ИМЯ> --to <ADDR> --amount <TRX>
    и переполнение `int64` приводят к ошибке.
 4. Валидация адреса получателя.
 5. Расшифровка keystore.
-6. Подключение по gRPC, построение транзакции
-   (`gotron-sdk` `Transfer`), подписание ECDSA, рассылка
-   (`Broadcast`).
+6. Построение транзакции через HTTPS REST (`/wallet/createtransaction`
+   по умолчанию; opt-in gRPC — `gotron-sdk` `Transfer`), подписание
+   ECDSA, рассылка (`/wallet/broadcasthex` или gRPC `Broadcast`).
 7. Если broadcast вернул не‑нулевой код — ошибка `broadcast: <message>`.
 8. Дозапись `--network` в метаданные.
 
@@ -227,8 +227,8 @@ monujo hot send-usdt --from <ИМЯ> --to <ADDR> --amount <USDT>
    положительной (`amount must be positive` иначе).
 4. Валидация адреса получателя.
 5. Расшифровка keystore.
-6. gRPC: `TRC20Send(from, to, contract, amount, feeLimit=100_000_000 sun)` —
-   формирует contract call USDT `transfer(address,uint256)`.
+6. REST: `POST /wallet/triggersmartcontract` (USDT `transfer(address,uint256)`,
+   `fee_limit=100_000_000` sun) или opt-in gRPC `TRC20Send`.
 7. Подписание ECDSA, broadcast.
 8. Дозапись `--network` в метаданные.
 

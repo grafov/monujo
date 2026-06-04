@@ -46,7 +46,8 @@ make build
 | `--network` | `mainnet` (по умолчанию) или `shasta` (тестовая сеть; контракт USDT отличается). |
 | `--output` | `table` или `json`. |
 | `--http-url` / `--grpc-url` | Переопределение базового URL TronGrid HTTP и gRPC `host:port`. |
-| `--grpc-insecure` | Использование нешифрованного gRPC только для доверенных локальных/приватных нод. |
+| `--write-transport` | `rest` (по умолчанию, HTTPS) или `grpc` (явный opt-in). |
+| `--grpc-url` / `--grpc-insecure` | Только с `--write-transport grpc` (у TronGrid gRPC — plaintext). |
 | `--force` | Пропуск подтверждения несовпадения сети в поддерживаемых горячих/офлайн операциях. |
 
 ## Только для чтения (холодный адрес, ПК с интернетом)
@@ -124,7 +125,7 @@ make build
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Горячие отправки используют **gRPC поверх TLS** к полной ноде Tron (по умолчанию `grpc.trongrid.io:50051` в mainnet) и подписывают внутри процесса. Используйте `--grpc-insecure` только для доверенных локальных/приватных нод. Вам нужно достаточно **TRX** для bandwidth/energy; переводы USDT потребляют energy — пополняйте горячий адрес соответственно.
+Горячие отправки по умолчанию идут через **HTTPS REST** TronGrid (`https://api.trongrid.io` в mainnet) и подписываются внутри процесса. Для своей ноды или legacy gRPC: `--write-transport grpc` (для TronGrid и типичного `java-tron` обычно нужен `--grpc-insecure`). Нужно достаточно **TRX** для bandwidth/energy; переводы USDT потребляют energy.
 
 ## Заметки по безопасности
 

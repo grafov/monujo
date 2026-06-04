@@ -27,6 +27,7 @@ import (
 	gclient "github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/common"
+	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/grafov/monujo/internal/config"
 	"google.golang.org/grpc"
@@ -35,14 +36,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// WriteClient signs and broadcasts transactions via Tron gRPC (hot wallet).
+// WriteClient signs and broadcasts transactions via Tron gRPC.
 type WriteClient struct {
 	cfg *config.Config
 	gc  *gclient.GrpcClient
 }
 
-// NewWriteClientFromConfig connects to Tron full node gRPC and returns a ready client.
-func NewWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
+// NewGRPCWriteClientFromConfig connects to a Tron full node over gRPC.
+func NewGRPCWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
 	gc := gclient.NewGrpcClientWithTimeout(cfg.GRPCAddress, 60*time.Second)
 	creds := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
 	if cfg.GRPCInsecure {
@@ -61,6 +62,13 @@ func NewWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
 		}
 	}
 	return &WriteClient{cfg: cfg, gc: gc}, nil
+}
+
+// NewWriteClientFromConfig is an alias for [NewGRPCWriteClientFromConfig].
+// Tests and explicit gRPC callers may use this; production code should use
+// [NewTransactionWriterFromConfig].
+func NewWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
+	return NewGRPCWriteClientFromConfig(cfg)
 }
 
 // Close releases the gRPC connection.
@@ -101,6 +109,73 @@ func (w *WriteClient) bindContext(ctx context.Context) error {
 		return w.gc.SetContext(context.Background())
 	}
 	return w.gc.SetContext(ctx)
+}
+
+// CreateTRXTransfer builds an unsigned native TRX transfer via gRPC.
+func (w *WriteClient) CreateTRXTransfer(ctx context.Context, from, to string, amountSun int64) (*core.Transaction, error) {
+	if err := w.bindContext(ctx); err != nil {
+		return nil, err
+	}
+	txe, err := w.gc.Transfer(from, to, amountSun)
+	if err != nil {
+		return nil, err
+	}
+	tx := txe.GetTransaction()
+	if tx == nil {
+		return nil, fmt.Errorf("empty transaction")
+	}
+	if ret := txe.GetResult(); ret != nil && ret.GetCode() != 0 {
+		return nil, fmt.Errorf("create trx: %s", string(ret.GetMessage()))
+	}
+	return tx, nil
+}
+
+// CreateTRC20Transfer builds an unsigned TRC-20 transfer via gRPC.
+func (w *WriteClient) CreateTRC20Transfer(ctx context.Context, from, to, contract string, amount *big.Int) (*core.Transaction, error) {
+	if err := w.bindContext(ctx); err != nil {
+		return nil, err
+	}
+	txe, err := w.gc.TRC20Send(from, to, contract, amount, w.cfg.DefaultFeeLimitSun)
+	if err != nil {
+		return nil, err
+	}
+	tx := txe.GetTransaction()
+	if tx == nil {
+		return nil, fmt.Errorf("empty transaction")
+	}
+	if ret := txe.GetResult(); ret != nil && ret.GetCode() != 0 {
+		return nil, fmt.Errorf("create trc20: %s", string(ret.GetMessage()))
+	}
+	return tx, nil
+}
+
+// BroadcastTransaction submits a signed transaction via gRPC.
+func (w *WriteClient) BroadcastTransaction(ctx context.Context, tx *core.Transaction) error {
+	if tx == nil {
+		return fmt.Errorf("empty transaction")
+	}
+	if err := w.bindContext(ctx); err != nil {
+		return err
+	}
+	ret, err := w.gc.Broadcast(tx)
+	if err != nil {
+		return err
+	}
+	if ret.GetCode() != 0 {
+		return fmt.Errorf("broadcast: %s", string(ret.GetMessage()))
+	}
+	return nil
+}
+
+// GetTransactionSignWeight queries multisig sign weight via gRPC.
+func (w *WriteClient) GetTransactionSignWeight(ctx context.Context, tx *core.Transaction) (*api.TransactionSignWeight, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("empty transaction")
+	}
+	if err := w.bindContext(ctx); err != nil {
+		return nil, err
+	}
+	return w.gc.GetTransactionSignWeight(tx)
 }
 
 func (w *WriteClient) signAndBroadcast(tx *core.Transaction, priv *ecdsa.PrivateKey) (string, error) {

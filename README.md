@@ -44,8 +44,9 @@ Requires Go 1.24+ (see `go.mod`).
 | `MONUJO_IMPORT_KEY`                      | Hex private key for `wallet import` if `--key-hex` is omitted.          |
 | `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).       |
 | `--output`                               | `table` or `json`.                                                      |
-| `--http-url` / `--grpc-url`              | Override TronGrid HTTP base URL and gRPC `host:port`.                   |
-| `--grpc-insecure`                        | Use plaintext gRPC only for trusted local/private nodes.                |
+| `--http-url`                             | Override TronGrid HTTP base URL (read + default write transport).       |
+| `--write-transport`                      | `rest` (default, HTTPS Wallet API) or `grpc` (opt-in, gotron-sdk).      |
+| `--grpc-url` / `--grpc-insecure`         | Used only with `--write-transport grpc` (TronGrid gRPC is plaintext).     |
 | `--force`                                | Skip network-mismatch confirmation on supported hot/offline operations. |
 
 ## Watch-only (cold address, online PC)
@@ -123,7 +124,7 @@ If you run **`hot balance`**, **`hot send-trx`**, or **`hot send-usdt`** with a 
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Hot sends use **gRPC over TLS** to a Tron full node (default `grpc.trongrid.io:50051` on mainnet) and sign in-process. Use `--grpc-insecure` only for trusted local/private nodes. You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
+Hot sends use **HTTPS REST** to TronGrid by default (`https://api.trongrid.io` on mainnet: `/wallet/createtransaction`, `/wallet/triggersmartcontract`, `/wallet/broadcasthex`) and sign in-process. For legacy or custom full nodes, opt in with `--write-transport grpc` (and usually `--grpc-insecure` for TronGrid or local `java-tron`). You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
 
 ## Security notes
 

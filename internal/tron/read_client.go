@@ -83,7 +83,7 @@ func (r *ReadClient) GetBalances(ctx context.Context, addr string) (*AccountBala
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("trongrid accounts: HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return nil, fmt.Errorf("trongrid accounts: HTTP %d: %s", resp.StatusCode, truncate(string(body)))
 	}
 	var ar accountResponse
 	if err := json.Unmarshal(body, &ar); err != nil {
@@ -166,7 +166,7 @@ func (r *ReadClient) ListUSDTTransfers(ctx context.Context, addr string, limit i
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("trongrid trc20 txs: HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return nil, fmt.Errorf("trongrid trc20 txs: HTTP %d: %s", resp.StatusCode, truncate(string(body)))
 	}
 	var tr trc20TxResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
@@ -203,9 +203,11 @@ func (r *ReadClient) addAPIKey(req *http.Request) {
 	}
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
+const errorBodyTruncateLen = 200
+
+func truncate(s string) string {
+	if len(s) <= errorBodyTruncateLen {
 		return s
 	}
-	return s[:n] + "..."
+	return s[:errorBodyTruncateLen] + "..."
 }

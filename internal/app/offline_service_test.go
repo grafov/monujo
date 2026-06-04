@@ -143,7 +143,7 @@ func newOfflineForTest(fw *fakeWallet, conn *grpc.ClientConn) (svc *OfflineServi
 	walletAddr = addr
 
 	svc = NewOfflineService(cfg)
-	svc.onlineWriter = func() (*tron.WriteClient, func(), error) {
+	svc.onlineWriter = func() (tron.TransactionWriter, func(), error) {
 		return trontest.NewWriteClientWithConn(cfg, conn), func() {}, nil
 	}
 	svc.confirmIn = strings.NewReader("y\n")

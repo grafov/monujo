@@ -212,7 +212,7 @@ func (h *HotService) SendTRX(ctx context.Context, name, to string, amountTRX str
 		return err
 	}
 	defer pk.Wipe()
-	wc, err := tron.NewWriteClientFromConfig(h.cfg)
+	wc, err := tron.NewTransactionWriterFromConfig(h.cfg)
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func (h *HotService) SendUSDT(ctx context.Context, name, to, amount string, pass
 	if amt.Sign() <= 0 {
 		return fmt.Errorf("amount must be positive")
 	}
-	wc, err := tron.NewWriteClientFromConfig(h.cfg)
+	wc, err := tron.NewTransactionWriterFromConfig(h.cfg)
 	if err != nil {
 		return err
 	}

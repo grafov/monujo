@@ -46,8 +46,8 @@ type OfflineService struct {
 
 	// onlineWriter and broadcaster exist to make Build/Broadcast testable
 	// without a real gRPC server. Production callers leave them nil and the
-	// service falls back to tron.NewWriteClientFromConfig.
-	onlineWriter func() (*tron.WriteClient, func(), error)
+	// service falls back to tron.NewTransactionWriterFromConfig.
+	onlineWriter func() (tron.TransactionWriter, func(), error)
 
 	// confirmIn is os.Stdin in production, overridable in tests.
 	confirmIn io.Reader
@@ -66,11 +66,11 @@ func NewOfflineService(cfg *config.Config) *OfflineService {
 	return &OfflineService{cfg: cfg, ks: cfg.KeystoreDir}
 }
 
-func (o *OfflineService) writer() (*tron.WriteClient, func(), error) {
+func (o *OfflineService) writer() (tron.TransactionWriter, func(), error) {
 	if o.onlineWriter != nil {
 		return o.onlineWriter()
 	}
-	wc, err := tron.NewWriteClientFromConfig(o.cfg)
+	wc, err := tron.NewTransactionWriterFromConfig(o.cfg)
 	if err != nil {
 		return nil, func() {}, err
 	}
@@ -163,7 +163,7 @@ func (o *OfflineService) Build(ctx context.Context, opts BuildOptions) (transfer
 		if perr != nil {
 			return zeroFP, perr
 		}
-		pl, err = tron.BuildUnsignedTRX(ctx, wc, from, opts.To, amountSun, opts.Note)
+		pl, err = tron.BuildUnsignedTRX(ctx, wc, o.cfg.Network, from, opts.To, amountSun, opts.Note)
 	case transfer.KindTRC20USDT:
 		amount, perr := domain.ParseUSDTDecimal(opts.AmountUSDT)
 		if perr != nil {
@@ -172,7 +172,7 @@ func (o *OfflineService) Build(ctx context.Context, opts BuildOptions) (transfer
 		if amount.Sign() <= 0 {
 			return zeroFP, errors.New("amount must be positive")
 		}
-		pl, err = tron.BuildUnsignedUSDT(ctx, wc, from, opts.To, amount, opts.Note)
+		pl, err = tron.BuildUnsignedUSDT(ctx, wc, o.cfg.Network, o.cfg.DefaultFeeLimitSun, from, opts.To, amount, opts.Note)
 	default:
 		return zeroFP, fmt.Errorf("unsupported kind %q", opts.Kind)
 	}

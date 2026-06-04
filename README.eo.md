@@ -46,7 +46,8 @@ Postulas Go 1.24+ (vidu `go.mod`).
 | `--network`                              | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas).          |
 | `--output`                               | `table` aŭ `json`.                                                               |
 | `--http-url` / `--grpc-url`              | Anstataŭigi TronGrid HTTP-bazan URL-on kaj gRPC `host:port`.                     |
-| `--grpc-insecure`                        | Uzi neĉifritan gRPC nur por fidindaj lokaj/privataj nodoj.                       |
+| `--write-transport`                      | `rest` (defaŭlte, HTTPS) aŭ `grpc` (opt-in).                                       |
+| `--grpc-url` / `--grpc-insecure`         | Nur kun `--write-transport grpc` (TronGrid gRPC estas plaintext).                  |
 | `--force`                                | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj. |
 
 ## Nur-lega (malvarma adreso, reta komputilo)
@@ -124,7 +125,7 @@ Se vi rulas **`hot balance`**, **`hot send-trx`**, aŭ **`hot send-usdt`** kun `
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Varmaj sendoj uzas **gRPC super TLS** al Tron-plena nodo (defaŭlte `grpc.trongrid.io:50051` en mainnet) kaj subskribas en-proceze. Uzu `--grpc-insecure` nur por fidindaj lokaj/privataj nodoj. Vi bezonas sufiĉe da **TRX** por bendolarĝo/energio; USDT-transigoj konsumas energion — financu la varman adreson laŭe.
+Varmaj sendoj defaŭlte uzas **HTTPS REST** al TronGrid (`https://api.trongrid.io` en mainnet) kaj subskribas en-proceze. Por propra nodo aŭ legacy gRPC: `--write-transport grpc` (ofte kun `--grpc-insecure` por TronGrid aŭ loka `java-tron`). Vi bezonas sufiĉe da **TRX** por bendolarĝo/energio; USDT-transigoj konsumas energion.
 
 ## Sekurecaj notoj
 
