@@ -104,7 +104,7 @@ func decodeRawDataHex(rawDataHex string) (*core.TransactionRaw, error) {
 // The function validates from/to addresses locally before any RPC.
 func BuildUnsignedTRX(ctx context.Context, w TransactionWriter, net config.Network, from, to string, amountSun int64, note string) (transfer.UnsignedTransferPayload, error) {
 	var zero transfer.UnsignedTransferPayload
-	if w == nil {
+	if transactionWriterIsNil(w) {
 		return zero, errors.New("offline: nil write client")
 	}
 	if err := ValidateBase58Address(from); err != nil {
@@ -151,7 +151,7 @@ func BuildUnsignedTRX(ctx context.Context, w TransactionWriter, net config.Netwo
 // online hot wallet would use.
 func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Network, feeLimitSun int64, from, to string, amount *big.Int, note string) (transfer.UnsignedTransferPayload, error) {
 	var zero transfer.UnsignedTransferPayload
-	if w == nil {
+	if transactionWriterIsNil(w) {
 		return zero, errors.New("offline: nil write client")
 	}
 	if err := ValidateBase58Address(from); err != nil {
@@ -223,7 +223,7 @@ func SignRawData(rawDataHex string, priv *ecdsa.PrivateKey) (sigHex, txIDHex str
 // and broadcasts it via the WriteClient's gRPC connection. Returns the txid
 // (0x-prefixed) on success.
 func BroadcastSigned(ctx context.Context, w TransactionWriter, rawDataHex, sigHex string) (string, error) {
-	if w == nil {
+	if transactionWriterIsNil(w) {
 		return "", errors.New("offline: nil write client")
 	}
 	raw, err := decodeRawDataHex(rawDataHex)

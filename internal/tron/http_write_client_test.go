@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +27,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/fbsobreira/gotron-sdk/pkg/address"
+	"github.com/fbsobreira/gotron-sdk/pkg/common"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"google.golang.org/protobuf/proto"
 
@@ -109,6 +112,67 @@ var _ = Describe("HTTPWriteClient", func() {
 		tx, err := hwc.CreateTRC20Transfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", tron.MainnetUSDTContract, amt)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(tx.GetRawData()).NotTo(BeNil())
+	})
+
+	It("packs TRC20 transfer data with selector and 32-byte padded address", func() {
+		var capturedData string
+		ts.Close()
+		sampleRaw, err := proto.Marshal(&core.TransactionRaw{
+			RefBlockBytes: []byte{0xab, 0xcd},
+			Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+			Timestamp:     time.Now().UnixMilli(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		sampleHex := hex.EncodeToString(sampleRaw)
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/triggersmartcontract", func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			Expect(err).NotTo(HaveOccurred())
+			var req map[string]any
+			Expect(json.Unmarshal(body, &req)).To(Succeed())
+			capturedData, _ = req["data"].(string)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"result": map[string]any{"result": true},
+				"transaction": map[string]any{
+					"txID":         strings.Repeat("bb", 32),
+					"raw_data_hex": sampleHex,
+				},
+			})
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		const toAddr = "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1"
+		amt := mustParseBigInt("65535")
+		_, err = hwc.CreateTRC20Transfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", toAddr, tron.MainnetUSDTContract, amt)
+		Expect(err).NotTo(HaveOccurred())
+
+		toBytes, err := address.Base58ToAddress(toAddr)
+		Expect(err).NotTo(HaveOccurred())
+		addrPayload := toBytes.Bytes()[1:]
+		addrPadded := common.LeftPadBytes(addrPayload, 32)
+		amountPadded := common.LeftPadBytes(amt.Bytes(), 32)
+		expected := "a9059cbb" + common.Bytes2Hex(addrPadded) + common.Bytes2Hex(amountPadded)
+		Expect(capturedData).To(Equal(expected))
+	})
+
+	It("returns error when trigger contract reports code without message", func() {
+		ts.Close()
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/triggersmartcontract", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"result": map[string]any{"code": 1, "message": ""},
+			})
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		_, err := hwc.CreateTRC20Transfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", tron.MainnetUSDTContract, mustParseBigInt("1"))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("error code 1"))
 	})
 
 	It("broadcasts signed transaction via broadcasthex", func() {

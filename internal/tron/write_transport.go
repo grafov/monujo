@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"reflect"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
@@ -36,6 +37,10 @@ type TransactionWriter interface {
 	CreateTRC20Transfer(ctx context.Context, from, to, contract string, amount *big.Int) (*core.Transaction, error)
 	BroadcastTransaction(ctx context.Context, tx *core.Transaction) error
 	GetTransactionSignWeight(ctx context.Context, tx *core.Transaction) (*api.TransactionSignWeight, error)
+}
+
+func transactionWriterIsNil(w TransactionWriter) bool {
+	return w == nil || reflect.ValueOf(w).IsNil()
 }
 
 // NewTransactionWriterFromConfig opens the configured write transport.

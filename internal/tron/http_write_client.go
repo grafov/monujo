@@ -99,9 +99,12 @@ func (h *HTTPWriteClient) CreateTRC20Transfer(ctx context.Context, from, to, con
 		return nil, err
 	}
 	ab := common.LeftPadBytes(amount.Bytes(), 32)
-	dataHex := trc20TransferMethodSignature +
-		"0000000000000000000000000000000000000000000000000000000000000000"[len(toAddr.Hex())-4:] + toAddr.Hex()[4:] +
-		common.Bytes2Hex(ab)
+	toAddrBytes := toAddr.Bytes()
+	if len(toAddrBytes) == 21 {
+		toAddrBytes = toAddrBytes[1:]
+	}
+	toAddrPadded := common.LeftPadBytes(toAddrBytes, 32)
+	dataHex := trc20TransferMethodSignature + common.Bytes2Hex(toAddrPadded) + common.Bytes2Hex(ab)
 	body := map[string]any{
 		"owner_address":    from,
 		"contract_address": contract,
@@ -224,8 +227,12 @@ func parseTriggerSmartContractTransaction(body []byte) (*core.Transaction, error
 	if err := json.Unmarshal(body, &wrap); err != nil {
 		return nil, fmt.Errorf("parse trigger response: %w", err)
 	}
-	if wrap.Result.Code != 0 && wrap.Result.Message != "" {
-		return nil, fmt.Errorf("trigger contract: %s", wrap.Result.Message)
+	if wrap.Result.Code != 0 {
+		msg := wrap.Result.Message
+		if msg == "" {
+			msg = fmt.Sprintf("error code %d", wrap.Result.Code)
+		}
+		return nil, fmt.Errorf("trigger contract: %s", msg)
 	}
 	if len(wrap.Transaction) == 0 {
 		return parseUnsignedTransaction(body)
@@ -361,18 +368,6 @@ func decodeApprovedList(raw json.RawMessage) ([][]byte, error) {
 		out := make([][]byte, 0, len(asStrings))
 		for _, s := range asStrings {
 			b, err := decodeTronAddressPayload(s)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, b)
-		}
-		return out, nil
-	}
-	var asHex []string
-	if err := json.Unmarshal(raw, &asHex); err == nil {
-		out := make([][]byte, 0, len(asHex))
-		for _, s := range asHex {
-			b, err := hex.DecodeString(trimHex0x(s))
 			if err != nil {
 				return nil, err
 			}

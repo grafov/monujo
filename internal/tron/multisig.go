@@ -192,7 +192,7 @@ var ErrAlreadySigned = errors.New("multisig: this key already signed the transac
 //
 // No broadcast is performed; this is safe to use from "multisig info".
 func GetMultisigSignWeight(ctx context.Context, w TransactionWriter, rawDataHex string, sigsHex []string) (*api.TransactionSignWeight, error) {
-	if w == nil {
+	if transactionWriterIsNil(w) {
 		return nil, errors.New("multisig: nil write client")
 	}
 	tx, err := assembleTransaction(rawDataHex, sigsHex)
@@ -208,7 +208,7 @@ func GetMultisigSignWeight(ctx context.Context, w TransactionWriter, rawDataHex 
 // weight is always populated (even on pre-check failure) so callers can
 // render a helpful diagnostic.
 func BroadcastMultisig(ctx context.Context, w TransactionWriter, rawDataHex string, sigsHex []string) (string, *api.TransactionSignWeight, error) {
-	if w == nil {
+	if transactionWriterIsNil(w) {
 		return "", nil, errors.New("multisig: nil write client")
 	}
 	tx, err := assembleTransaction(rawDataHex, sigsHex)
@@ -230,7 +230,7 @@ func BroadcastMultisig(ctx context.Context, w TransactionWriter, rawDataHex stri
 			current, threshold, perm.GetId())
 	}
 	if err := w.BroadcastTransaction(ctx, tx); err != nil {
-		return "", weight, err
+		return "", weight, fmt.Errorf("multisig: broadcast: %w", err)
 	}
 	txid, err := txIDFromRawData(tx.GetRawData())
 	if err != nil {
