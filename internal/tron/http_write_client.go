@@ -304,6 +304,10 @@ func parseSignWeightResponse(body []byte) (*api.TransactionSignWeight, error) {
 			Threshold int64  `json:"threshold"`
 			Type      string `json:"type"`
 			Name      string `json:"permission_name"`
+			Keys      []struct {
+				Address string `json:"address"`
+				Weight  int64  `json:"weight"`
+			} `json:"keys"`
 		} `json:"permission"`
 		CurrentWeight int64           `json:"current_weight"`
 		ApprovedList  json.RawMessage `json:"approved_list"`
@@ -314,10 +318,22 @@ func parseSignWeightResponse(body []byte) (*api.TransactionSignWeight, error) {
 	if err := json.Unmarshal(body, &js); err != nil {
 		return nil, fmt.Errorf("parse sign weight: %w", err)
 	}
+	keys := make([]*core.Key, 0, len(js.Permission.Keys))
+	for _, k := range js.Permission.Keys {
+		addrBytes, err := decodeTronAddressPayload(k.Address)
+		if err != nil {
+			return nil, fmt.Errorf("decode permission key address %q: %w", k.Address, err)
+		}
+		keys = append(keys, &core.Key{
+			Address: addrBytes,
+			Weight:  k.Weight,
+		})
+	}
 	perm := &core.Permission{
 		Id:             js.Permission.ID,
 		Threshold:      js.Permission.Threshold,
 		PermissionName: js.Permission.Name,
+		Keys:           keys,
 	}
 	approved, err := decodeApprovedList(js.ApprovedList)
 	if err != nil {

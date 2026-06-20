@@ -228,6 +228,10 @@ var _ = Describe("HTTPWriteClient", func() {
 				"permission": map[string]any{
 					"id":        2,
 					"threshold": 2,
+					"keys": []map[string]any{
+						{"address": "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "weight": 1},
+						{"address": "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", "weight": 1},
+					},
 				},
 				"approved_list": []string{},
 				"result":        map[string]any{"code": "ENOUGH_PERMISSION"},
@@ -240,6 +244,12 @@ var _ = Describe("HTTPWriteClient", func() {
 		weight, err := hwc.GetTransactionSignWeight(context.Background(), tx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(weight.GetCurrentWeight()).To(Equal(int64(2)))
+		Expect(weight.GetPermission()).NotTo(BeNil())
+		Expect(weight.GetPermission().GetKeys()).To(HaveLen(2))
+		Expect(weight.GetPermission().GetKeys()[0].Address).To(Equal(fromBytes.Bytes()))
+		Expect(weight.GetPermission().GetKeys()[0].Weight).To(Equal(int64(1)))
+		Expect(weight.GetPermission().GetKeys()[1].Address).To(Equal(toBytes.Bytes()))
+		Expect(weight.GetPermission().GetKeys()[1].Weight).To(Equal(int64(1)))
 
 		Expect(capturedReq["visible"]).To(BeTrue())
 		Expect(capturedReq["raw_data_hex"]).NotTo(BeEmpty())
