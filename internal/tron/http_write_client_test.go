@@ -31,6 +31,7 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/common"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/grafov/monujo/internal/config"
 	"github.com/grafov/monujo/internal/tron"
@@ -181,12 +182,160 @@ var _ = Describe("HTTPWriteClient", func() {
 		Expect(hwc.BroadcastTransaction(context.Background(), tx)).To(Succeed())
 	})
 
-	It("queries sign weight via REST", func() {
-		tx, err := hwc.CreateTRXTransfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", 1)
+	It("queries sign weight via REST and asserts request shape", func() {
+		fromBytes, err := address.Base58ToAddress("TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g")
 		Expect(err).NotTo(HaveOccurred())
+		toBytes, err := address.Base58ToAddress("TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1")
+		Expect(err).NotTo(HaveOccurred())
+
+		param := &core.TransferContract{
+			OwnerAddress: fromBytes.Bytes(),
+			ToAddress:    toBytes.Bytes(),
+			Amount:       1,
+		}
+		anyParam, err := proto.Marshal(param)
+		Expect(err).NotTo(HaveOccurred())
+
+		tx := &core.Transaction{
+			RawData: &core.TransactionRaw{
+				RefBlockBytes: []byte{0x12, 0x34},
+				RefBlockHash:  []byte{0x56, 0x78},
+				Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+				Timestamp:     time.Now().UnixMilli(),
+				Contract: []*core.Transaction_Contract{
+					{
+						Type: core.Transaction_Contract_TransferContract,
+						Parameter: &anypb.Any{
+							TypeUrl: "type.googleapis.com/protocol.TransferContract",
+							Value:   anyParam,
+						},
+					},
+				},
+			},
+		}
+
+		var capturedReq map[string]any
+		ts.Close()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/getsignweight", func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(json.Unmarshal(body, &capturedReq)).To(Succeed())
+
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"current_weight": 2,
+				"permission": map[string]any{
+					"id":        2,
+					"threshold": 2,
+				},
+				"approved_list": []string{},
+				"result":        map[string]any{"code": "ENOUGH_PERMISSION"},
+			})
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
 		weight, err := hwc.GetTransactionSignWeight(context.Background(), tx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(weight.GetCurrentWeight()).To(Equal(int64(2)))
-		Expect(weight.GetPermission().GetThreshold()).To(Equal(int64(2)))
+
+		Expect(capturedReq["visible"]).To(BeTrue())
+		Expect(capturedReq["raw_data_hex"]).NotTo(BeEmpty())
+		Expect(capturedReq["signature"]).To(BeEmpty())
+
+		rawData, ok := capturedReq["raw_data"].(map[string]any)
+		Expect(ok).To(BeTrue())
+		Expect(rawData["ref_block_bytes"]).NotTo(BeEmpty())
+		Expect(rawData["ref_block_hash"]).NotTo(BeEmpty())
+
+		contracts, ok := rawData["contract"].([]any)
+		Expect(ok).To(BeTrue())
+		Expect(contracts).To(HaveLen(1))
+
+		c, ok := contracts[0].(map[string]any)
+		Expect(ok).To(BeTrue())
+		Expect(c["type"]).To(Equal("TransferContract"))
+
+		paramJSON, ok := c["parameter"].(map[string]any)
+		Expect(ok).To(BeTrue())
+		Expect(paramJSON["type_url"]).To(Equal("type.googleapis.com/protocol.TransferContract"))
+
+		val, ok := paramJSON["value"].(map[string]any)
+		Expect(ok).To(BeTrue())
+		Expect(val["amount"]).To(BeEquivalentTo(1))
+		Expect(val["owner_address"]).To(Equal("TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g"))
+		Expect(val["to_address"]).To(Equal("TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1"))
+	})
+
+	It("queries sign weight for a multisig signed transaction with Permission_id", func() {
+		fromBytes, err := address.Base58ToAddress("TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g")
+		Expect(err).NotTo(HaveOccurred())
+		toBytes, err := address.Base58ToAddress("TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1")
+		Expect(err).NotTo(HaveOccurred())
+
+		param := &core.TransferContract{
+			OwnerAddress: fromBytes.Bytes(),
+			ToAddress:    toBytes.Bytes(),
+			Amount:       1,
+		}
+		anyParam, err := proto.Marshal(param)
+		Expect(err).NotTo(HaveOccurred())
+
+		tx := &core.Transaction{
+			RawData: &core.TransactionRaw{
+				RefBlockBytes: []byte{0x12, 0x34},
+				RefBlockHash:  []byte{0x56, 0x78},
+				Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+				Timestamp:     time.Now().UnixMilli(),
+				Contract: []*core.Transaction_Contract{
+					{
+						Type: core.Transaction_Contract_TransferContract,
+						Parameter: &anypb.Any{
+							TypeUrl: "type.googleapis.com/protocol.TransferContract",
+							Value:   anyParam,
+						},
+						PermissionId: 2,
+					},
+				},
+			},
+			Signature: [][]byte{make([]byte, 65)},
+		}
+
+		var capturedReq map[string]any
+		ts.Close()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/getsignweight", func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(json.Unmarshal(body, &capturedReq)).To(Succeed())
+
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"current_weight": 2,
+				"permission": map[string]any{
+					"id":        2,
+					"threshold": 2,
+				},
+				"approved_list": []string{},
+				"result":        map[string]any{"code": "ENOUGH_PERMISSION"},
+			})
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		_, err = hwc.GetTransactionSignWeight(context.Background(), tx)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(capturedReq["signature"]).To(HaveLen(1))
+
+		rawData := capturedReq["raw_data"].(map[string]any)
+		contracts := rawData["contract"].([]any)
+		Expect(contracts).To(HaveLen(1))
+
+		c := contracts[0].(map[string]any)
+		Expect(c["Permission_id"]).To(BeEquivalentTo(2))
 	})
 })

@@ -294,19 +294,7 @@ func parseBroadcastResult(body []byte) error {
 }
 
 func transactionToSignWeightJSON(tx *core.Transaction) (map[string]any, error) {
-	rawDataHex, err := rawDataToHex(tx.GetRawData())
-	if err != nil {
-		return nil, err
-	}
-	sigs := make([]string, 0, len(tx.GetSignature()))
-	for _, sig := range tx.GetSignature() {
-		sigs = append(sigs, hex.EncodeToString(sig))
-	}
-	return map[string]any{
-		"raw_data_hex": strings.TrimPrefix(rawDataHex, "0x"),
-		"signature":    sigs,
-		"visible":      true,
-	}, nil
+	return transactionToHTTPJSON(tx, true)
 }
 
 func parseSignWeightResponse(body []byte) (*api.TransactionSignWeight, error) {
