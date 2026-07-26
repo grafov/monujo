@@ -49,6 +49,9 @@ func NewHTTPWriteClientFromConfig(cfg *config.Config) *HTTPWriteClient {
 		cfg: cfg,
 		client: &http.Client{
 			Timeout: 60 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return fmt.Errorf("refusing HTTP redirect on write transport")
+			},
 		},
 	}
 }
@@ -218,21 +221,14 @@ func parseUnsignedTransaction(body []byte) (*core.Transaction, error) {
 
 func parseTriggerSmartContractTransaction(body []byte) (*core.Transaction, error) {
 	var wrap struct {
-		Result struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"result"`
+		Result      json.RawMessage `json:"result"`
 		Transaction json.RawMessage `json:"transaction"`
 	}
 	if err := json.Unmarshal(body, &wrap); err != nil {
 		return nil, fmt.Errorf("parse trigger response: %w", err)
 	}
-	if wrap.Result.Code != 0 {
-		msg := wrap.Result.Message
-		if msg == "" {
-			msg = fmt.Sprintf("error code %d", wrap.Result.Code)
-		}
-		return nil, fmt.Errorf("trigger contract: %s", msg)
+	if err := checkTriggerAPIResult(wrap.Result); err != nil {
+		return nil, err
 	}
 	if len(wrap.Transaction) == 0 {
 		return parseUnsignedTransaction(body)
@@ -242,6 +238,93 @@ func parseTriggerSmartContractTransaction(body []byte) (*core.Transaction, error
 		return nil, err
 	}
 	return transactionFromRawDataHex(rawHex)
+}
+
+// checkTriggerAPIResult rejects failed triggersmartcontract responses, matching
+// gRPC Return handling. Tron HTTP uses result.result (bool) and code as string or int.
+func checkTriggerAPIResult(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return fmt.Errorf("parse trigger result: %w", err)
+	}
+	msg := ""
+	if m, ok := obj["message"]; ok {
+		var s string
+		if json.Unmarshal(m, &s) == nil {
+			msg = decodeMaybeHexMessage(s)
+		}
+	}
+	codeStr := ""
+	if c, ok := obj["code"]; ok {
+		codeStr = rawJSONScalarString(c)
+	}
+	failed := false
+	if r, ok := obj["result"]; ok {
+		var b bool
+		if json.Unmarshal(r, &b) == nil && !b {
+			failed = true
+		}
+	}
+	if codeStr != "" && codeStr != "0" && !strings.EqualFold(codeStr, "SUCCESS") {
+		failed = true
+	}
+	if !failed {
+		return nil
+	}
+	if msg == "" {
+		msg = codeStr
+	}
+	if msg == "" {
+		msg = "trigger failed"
+	} else if codeStr != "" && msg != codeStr {
+		msg = fmt.Sprintf("%s (%s)", msg, codeStr)
+	}
+	return fmt.Errorf("trigger contract: %s", msg)
+}
+
+func rawJSONScalarString(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return strings.TrimSpace(s)
+	}
+	var n json.Number
+	if json.Unmarshal(raw, &n) == nil {
+		return n.String()
+	}
+	var i int
+	if json.Unmarshal(raw, &i) == nil {
+		return fmt.Sprintf("%d", i)
+	}
+	return strings.Trim(string(raw), `"`)
+}
+
+func decodeMaybeHexMessage(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	cleaned := trimHex0x(s)
+	if len(cleaned) < 2 || len(cleaned)%2 != 0 {
+		return s
+	}
+	for _, c := range cleaned {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return s
+		}
+	}
+	b, err := hex.DecodeString(cleaned)
+	if err != nil || len(b) == 0 {
+		return s
+	}
+	for _, c := range b {
+		if c < 0x20 || c > 0x7e {
+			return s
+		}
+	}
+	return string(b)
 }
 
 func extractRawDataHex(body []byte) (string, error) {
@@ -283,7 +366,7 @@ func parseBroadcastResult(body []byte) error {
 	if br.Result {
 		return nil
 	}
-	msg := br.Message
+	msg := decodeMaybeHexMessage(br.Message)
 	if msg == "" {
 		msg = br.Code
 	}
@@ -294,7 +377,7 @@ func parseBroadcastResult(body []byte) error {
 }
 
 func transactionToSignWeightJSON(tx *core.Transaction) (map[string]any, error) {
-	return transactionToHTTPJSON(tx, true)
+	return transactionToHTTPJSON(tx)
 }
 
 func parseSignWeightResponse(body []byte) (*api.TransactionSignWeight, error) {

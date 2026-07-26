@@ -97,8 +97,8 @@ func decodeRawDataHex(rawDataHex string) (*core.TransactionRaw, error) {
 	return &raw, nil
 }
 
-// BuildUnsignedTRX prepares an unsigned TRX transfer payload using the live
-// gRPC node (only the node's CreateTransaction2 call, no signing). The
+// BuildUnsignedTRX prepares an unsigned TRX transfer payload using the
+// configured write transport (CreateTRXTransfer, no signing). The
 // resulting payload can be carried to an offline machine for signing.
 //
 // The function validates from/to addresses locally before any RPC.
@@ -146,9 +146,9 @@ func BuildUnsignedTRX(ctx context.Context, w TransactionWriter, net config.Netwo
 }
 
 // BuildUnsignedUSDT prepares an unsigned TRC-20 USDT transfer payload using
-// the live gRPC node (TRC20Send), without signing. The contract address is
-// taken from cfg.Network via [USDTContractForNetwork], matching what the
-// online hot wallet would use.
+// the configured write transport (CreateTRC20Transfer, no signing). The
+// contract address is taken from cfg.Network via [USDTContractForNetwork],
+// matching what the online hot wallet would use.
 func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Network, feeLimitSun int64, from, to string, amount *big.Int, note string) (transfer.UnsignedTransferPayload, error) {
 	var zero transfer.UnsignedTransferPayload
 	if transactionWriterIsNil(w) {
@@ -177,6 +177,10 @@ func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Netw
 	if err != nil {
 		return zero, err
 	}
+	fee := raw.GetFeeLimit()
+	if fee == 0 {
+		fee = feeLimitSun
+	}
 	return transfer.UnsignedTransferPayload{
 		Version:       transfer.EnvelopeVersion,
 		Chain:         chainForNetwork(net),
@@ -186,7 +190,7 @@ func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Netw
 		Amount:        domain.FormatMinimalUSDT(amount) + " USDT",
 		AmountMinimal: amount.String(),
 		Contract:      contract,
-		FeeLimitSun:   feeLimitSun,
+		FeeLimitSun:   fee,
 		RawDataHex:    rawHex,
 		Expiration:    raw.GetExpiration(),
 		Timestamp:     raw.GetTimestamp(),
@@ -220,7 +224,7 @@ func SignRawData(rawDataHex string, priv *ecdsa.PrivateKey) (sigHex, txIDHex str
 }
 
 // BroadcastSigned reassembles a core.Transaction from rawDataHex+signature
-// and broadcasts it via the WriteClient's gRPC connection. Returns the txid
+// and broadcasts it via the configured write transport. Returns the txid
 // (0x-prefixed) on success.
 func BroadcastSigned(ctx context.Context, w TransactionWriter, rawDataHex, sigHex string) (string, error) {
 	if transactionWriterIsNil(w) {

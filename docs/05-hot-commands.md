@@ -18,7 +18,8 @@ monujo hot
 ```
 
 Глобальные ключи (`--network`, `--output`, `--api-key`,
-`--keystore-dir`, `--http-url`, `--grpc-url`) применимы ко всем
+`--keystore-dir`, `--http-url`, `--write-transport`, `--grpc-url`,
+`--grpc-insecure`, `--allow-insecure-http`) применимы ко всем
 подкомандам. Подробнее см. [03 — Конфигурация](03-configuration.md).
 
 ## Общие принципы

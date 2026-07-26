@@ -116,7 +116,7 @@ var _ = Describe("integration: tron", Ordered, func() {
 		})
 	})
 
-	Describe("WriteClient against Shasta", func() {
+	Describe("GRPCWriteClient against Shasta", func() {
 		BeforeEach(func() {
 			if keyHex == "" || toAddr == "" {
 				Skip("MONUJO_TRON_TEST_KEY / MONUJO_TRON_TEST_ADDR_TO not set")

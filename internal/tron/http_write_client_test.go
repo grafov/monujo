@@ -159,7 +159,7 @@ var _ = Describe("HTTPWriteClient", func() {
 		Expect(capturedData).To(Equal(expected))
 	})
 
-	It("returns error when trigger contract reports code without message", func() {
+	It("returns error when trigger contract reports non-success code", func() {
 		ts.Close()
 		mux := http.NewServeMux()
 		mux.HandleFunc("/wallet/triggersmartcontract", func(w http.ResponseWriter, _ *http.Request) {
@@ -173,7 +173,116 @@ var _ = Describe("HTTPWriteClient", func() {
 
 		_, err := hwc.CreateTRC20Transfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", tron.MainnetUSDTContract, mustParseBigInt("1"))
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("error code 1"))
+		Expect(err.Error()).To(ContainSubstring("trigger contract"))
+		Expect(err.Error()).To(ContainSubstring("1"))
+	})
+
+	It("rejects trigger result:false even when transaction is present", func() {
+		ts.Close()
+		sampleRaw, err := proto.Marshal(&core.TransactionRaw{
+			RefBlockBytes: []byte{0xab, 0xcd},
+			Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+			Timestamp:     time.Now().UnixMilli(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		sampleHex := hex.EncodeToString(sampleRaw)
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/triggersmartcontract", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"result": map[string]any{
+					"result":  false,
+					"code":    "CONTRACT_VALIDATE_ERROR",
+					"message": hex.EncodeToString([]byte("account does not exist")),
+				},
+				"transaction": map[string]any{
+					"raw_data_hex": sampleHex,
+				},
+			})
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		_, err = hwc.CreateTRC20Transfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", tron.MainnetUSDTContract, mustParseBigInt("1"))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("account does not exist"))
+		Expect(err.Error()).To(ContainSubstring("CONTRACT_VALIDATE_ERROR"))
+	})
+
+	It("surfaces string trigger code without unmarshal failure", func() {
+		ts.Close()
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/triggersmartcontract", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"result": map[string]any{
+					"result": false,
+					"code":   "BANDWITH_ERROR",
+				},
+			})
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		_, err := hwc.CreateTRC20Transfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", tron.MainnetUSDTContract, mustParseBigInt("1"))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("BANDWITH_ERROR"))
+	})
+
+	It("returns create transaction HTTP errors", func() {
+		ts.Close()
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/createtransaction", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"Error":"bad amount"}`))
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		_, err := hwc.CreateTRXTransfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", 1)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(Or(ContainSubstring("bad amount"), ContainSubstring("HTTP 400")))
+	})
+
+	It("decodes hex broadcast failure messages", func() {
+		ts.Close()
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/broadcasthex", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"result":  false,
+				"code":    "SIGERROR",
+				"message": hex.EncodeToString([]byte("validate signature error")),
+			})
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		err := hwc.BroadcastTransaction(context.Background(), &core.Transaction{RawData: &core.TransactionRaw{}})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("validate signature error"))
+	})
+
+	It("refuses HTTP redirects on write paths", func() {
+		ts.Close()
+		final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"raw_data_hex": "00"})
+		}))
+		DeferCleanup(final.Close)
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/wallet/createtransaction", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, final.URL+"/wallet/createtransaction", http.StatusFound)
+		})
+		ts = httptest.NewServer(mux)
+		cfg.HTTPBaseURL = ts.URL
+		hwc = tron.NewHTTPWriteClientFromConfig(cfg)
+
+		_, err := hwc.CreateTRXTransfer(context.Background(), "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g", "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1", 1)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("redirect"))
 	})
 
 	It("broadcasts signed transaction via broadcasthex", func() {

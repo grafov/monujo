@@ -37,14 +37,15 @@ func SetBuildInfo(version, commit string) {
 }
 
 var (
-	networkFlag        string
-	outputFlag         string
-	httpURLFlag        string
-	grpcURLFlag        string
-	grpcInsecureFlag   bool
-	writeTransportFlag string
-	apiKeyFlag         string
-	keystoreDirFlag    string
+	networkFlag           string
+	outputFlag            string
+	httpURLFlag           string
+	grpcURLFlag           string
+	grpcInsecureFlag      bool
+	writeTransportFlag    string
+	allowInsecureHTTPFlag bool
+	apiKeyFlag            string
+	keystoreDirFlag       string
 )
 
 // Execute runs the root command.
@@ -64,10 +65,11 @@ func newRootCmd() *cobra.Command {
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.PersistentFlags().StringVar(&networkFlag, "network", "mainnet", "Tron network: mainnet or shasta")
 	root.PersistentFlags().StringVar(&outputFlag, "output", "table", "Output format: table or json")
-	root.PersistentFlags().StringVar(&httpURLFlag, "http-url", "", "Override TronGrid HTTP base URL (read + default write transport)")
-	root.PersistentFlags().StringVar(&writeTransportFlag, "write-transport", "rest", "Write transport: rest (HTTPS, default) or grpc (opt-in)")
-	root.PersistentFlags().StringVar(&grpcURLFlag, "grpc-url", "", "Override Tron gRPC address (host:port); used only with --write-transport grpc")
-	root.PersistentFlags().BoolVar(&grpcInsecureFlag, "grpc-insecure", false, "Use plaintext gRPC (with --write-transport grpc; required for TronGrid and most full nodes)")
+	root.PersistentFlags().StringVar(&httpURLFlag, "http-url", "", "Override TronGrid HTTP base URL (read + default REST write)")
+	root.PersistentFlags().StringVar(&writeTransportFlag, "write-transport", "rest", "Advanced: write transport rest (HTTPS, default) or grpc (opt-in)")
+	root.PersistentFlags().StringVar(&grpcURLFlag, "grpc-url", "", "Advanced: override Tron gRPC address (host:port); requires --write-transport grpc")
+	root.PersistentFlags().BoolVar(&grpcInsecureFlag, "grpc-insecure", false, "Advanced: plaintext gRPC (requires --write-transport grpc; needed for TronGrid and most full nodes)")
+	root.PersistentFlags().BoolVar(&allowInsecureHTTPFlag, "allow-insecure-http", false, "Advanced: allow http:// for REST write/read (insecure; stderr warning)")
 	root.PersistentFlags().StringVar(&apiKeyFlag, "api-key", "", "TronGrid API key (or env MONUJO_TRONGRID_API_KEY)")
 	root.PersistentFlags().StringVar(&keystoreDirFlag, "keystore-dir", "", "Keystore directory (default: ~/.config/monujo/keystore)")
 
@@ -80,7 +82,7 @@ func newRootCmd() *cobra.Command {
 	return root
 }
 
-func loadConfig(_ *cobra.Command) (*config.Config, error) {
+func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 	net, err := config.ParseNetwork(networkFlag)
 	if err != nil {
 		return nil, err
@@ -97,12 +99,38 @@ func loadConfig(_ *cobra.Command) (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if wt == config.WriteTransportREST && rootPersistentFlagChanged(cmd, "grpc-url", "grpc-insecure") {
+		return nil, fmt.Errorf("--grpc-url / --grpc-insecure require --write-transport grpc (REST is the default write transport)")
+	}
 	cfg, err := config.Build(net, out, httpURLFlag, grpcURLFlag, key, keystoreDirFlag)
 	if err != nil {
 		return nil, err
 	}
 	cfg.WriteTransport = wt
 	cfg.GRPCInsecure = grpcInsecureFlag
+	cfg.AllowInsecureHTTP = allowInsecureHTTPFlag
+	if wt == config.WriteTransportREST {
+		if err := config.ValidateRESTHTTPBaseURL(cfg.HTTPBaseURL, cfg.AllowInsecureHTTP); err != nil {
+			return nil, err
+		}
+		if cfg.AllowInsecureHTTP && !config.IsHTTPSBaseURL(cfg.HTTPBaseURL) {
+			fmt.Fprintf(os.Stderr, "warning: using insecure http:// endpoint %s for REST (--allow-insecure-http)\n", cfg.HTTPBaseURL)
+		}
+	}
 	tron.WarnTronGridPlaintextGRPC(os.Stderr, cfg)
 	return cfg, nil
+}
+
+// rootPersistentFlagChanged reports whether any of the named root persistent flags were set on the CLI.
+func rootPersistentFlagChanged(cmd *cobra.Command, names ...string) bool {
+	if cmd == nil {
+		return false
+	}
+	root := cmd.Root()
+	for _, name := range names {
+		if root.PersistentFlags().Changed(name) {
+			return true
+		}
+	}
+	return false
 }

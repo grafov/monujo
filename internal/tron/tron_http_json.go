@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func transactionToHTTPJSON(tx *core.Transaction, visible bool) (map[string]any, error) {
+func transactionToHTTPJSON(tx *core.Transaction) (map[string]any, error) {
 	if tx == nil || tx.GetRawData() == nil {
 		return nil, errors.New("nil transaction or raw_data")
 	}
@@ -64,8 +64,8 @@ func transactionToHTTPJSON(tx *core.Transaction, visible bool) (map[string]any, 
 				return nil, fmt.Errorf("unmarshal TransferContract: %w", err)
 			}
 			valMap = map[string]any{
-				"owner_address": encodeAddress(tc.GetOwnerAddress(), visible),
-				"to_address":    encodeAddress(tc.GetToAddress(), visible),
+				"owner_address": common.EncodeCheck(tc.GetOwnerAddress()),
+				"to_address":    common.EncodeCheck(tc.GetToAddress()),
 				"amount":        tc.GetAmount(),
 			}
 
@@ -76,8 +76,8 @@ func transactionToHTTPJSON(tx *core.Transaction, visible bool) (map[string]any, 
 				return nil, fmt.Errorf("unmarshal TriggerSmartContract: %w", err)
 			}
 			valMap = map[string]any{
-				"owner_address":    encodeAddress(ts.GetOwnerAddress(), visible),
-				"contract_address": encodeAddress(ts.GetContractAddress(), visible),
+				"owner_address":    common.EncodeCheck(ts.GetOwnerAddress()),
+				"contract_address": common.EncodeCheck(ts.GetContractAddress()),
 				"data":             hex.EncodeToString(ts.GetData()),
 			}
 			if ts.GetCallValue() != 0 {
@@ -127,17 +127,10 @@ func transactionToHTTPJSON(tx *core.Transaction, visible bool) (map[string]any, 
 	}
 
 	return map[string]any{
-		"visible":      visible,
+		"visible":      true,
 		"txID":         txID,
 		"raw_data":     rawDataJSON,
 		"raw_data_hex": rawDataHex,
 		"signature":    sigs,
 	}, nil
-}
-
-func encodeAddress(addr []byte, visible bool) string {
-	if visible {
-		return common.EncodeCheck(addr)
-	}
-	return hex.EncodeToString(addr)
 }

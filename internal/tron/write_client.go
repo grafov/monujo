@@ -36,14 +36,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// WriteClient signs and broadcasts transactions via Tron gRPC.
-type WriteClient struct {
+// GRPCWriteClient signs and broadcasts transactions via Tron gRPC.
+type GRPCWriteClient struct {
 	cfg *config.Config
 	gc  *gclient.GrpcClient
 }
 
 // NewGRPCWriteClientFromConfig connects to a Tron full node over gRPC.
-func NewGRPCWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
+func NewGRPCWriteClientFromConfig(cfg *config.Config) (*GRPCWriteClient, error) {
 	gc := gclient.NewGrpcClientWithTimeout(cfg.GRPCAddress, 60*time.Second)
 	creds := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
 	if cfg.GRPCInsecure {
@@ -61,18 +61,11 @@ func NewGRPCWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
 			return nil, err
 		}
 	}
-	return &WriteClient{cfg: cfg, gc: gc}, nil
-}
-
-// NewWriteClientFromConfig is an alias for [NewGRPCWriteClientFromConfig].
-// Tests and explicit gRPC callers may use this; production code should use
-// [NewTransactionWriterFromConfig].
-func NewWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
-	return NewGRPCWriteClientFromConfig(cfg)
+	return &GRPCWriteClient{cfg: cfg, gc: gc}, nil
 }
 
 // Close releases the gRPC connection.
-func (w *WriteClient) Close() error {
+func (w *GRPCWriteClient) Close() error {
 	if w.gc != nil && w.gc.Conn != nil {
 		return w.gc.Conn.Close()
 	}
@@ -87,7 +80,7 @@ func callerCtx(ctx context.Context) context.Context {
 }
 
 // SendTRX transfers native TRX (amount in sun).
-func (w *WriteClient) SendTRX(ctx context.Context, fromAddr, toAddr string, amountSun int64, priv *ecdsa.PrivateKey) (string, error) {
+func (w *GRPCWriteClient) SendTRX(ctx context.Context, fromAddr, toAddr string, amountSun int64, priv *ecdsa.PrivateKey) (string, error) {
 	txe, err := w.gc.TransferCtx(callerCtx(ctx), fromAddr, toAddr, amountSun)
 	if err != nil {
 		return "", err
@@ -96,7 +89,7 @@ func (w *WriteClient) SendTRX(ctx context.Context, fromAddr, toAddr string, amou
 }
 
 // SendUSDT transfers USDT on the configured network using the canonical USDT (or test) contract.
-func (w *WriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string, amount *big.Int, priv *ecdsa.PrivateKey) (string, error) {
+func (w *GRPCWriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string, amount *big.Int, priv *ecdsa.PrivateKey) (string, error) {
 	contract := USDTContractForNetwork(w.cfg.Network)
 	txe, err := w.gc.TRC20SendCtx(callerCtx(ctx), fromAddr, toAddr, contract, amount, w.cfg.DefaultFeeLimitSun)
 	if err != nil {
@@ -106,7 +99,7 @@ func (w *WriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string, amo
 }
 
 // CreateTRXTransfer builds an unsigned native TRX transfer via gRPC.
-func (w *WriteClient) CreateTRXTransfer(ctx context.Context, from, to string, amountSun int64) (*core.Transaction, error) {
+func (w *GRPCWriteClient) CreateTRXTransfer(ctx context.Context, from, to string, amountSun int64) (*core.Transaction, error) {
 	txe, err := w.gc.TransferCtx(callerCtx(ctx), from, to, amountSun)
 	if err != nil {
 		return nil, err
@@ -122,7 +115,7 @@ func (w *WriteClient) CreateTRXTransfer(ctx context.Context, from, to string, am
 }
 
 // CreateTRC20Transfer builds an unsigned TRC-20 transfer via gRPC.
-func (w *WriteClient) CreateTRC20Transfer(ctx context.Context, from, to, contract string, amount *big.Int) (*core.Transaction, error) {
+func (w *GRPCWriteClient) CreateTRC20Transfer(ctx context.Context, from, to, contract string, amount *big.Int) (*core.Transaction, error) {
 	txe, err := w.gc.TRC20SendCtx(callerCtx(ctx), from, to, contract, amount, w.cfg.DefaultFeeLimitSun)
 	if err != nil {
 		return nil, err
@@ -138,7 +131,7 @@ func (w *WriteClient) CreateTRC20Transfer(ctx context.Context, from, to, contrac
 }
 
 // BroadcastTransaction submits a signed transaction via gRPC.
-func (w *WriteClient) BroadcastTransaction(ctx context.Context, tx *core.Transaction) error {
+func (w *GRPCWriteClient) BroadcastTransaction(ctx context.Context, tx *core.Transaction) error {
 	if tx == nil {
 		return fmt.Errorf("empty transaction")
 	}
@@ -156,14 +149,14 @@ func (w *WriteClient) BroadcastTransaction(ctx context.Context, tx *core.Transac
 }
 
 // GetTransactionSignWeight queries multisig sign weight via gRPC.
-func (w *WriteClient) GetTransactionSignWeight(ctx context.Context, tx *core.Transaction) (*api.TransactionSignWeight, error) {
+func (w *GRPCWriteClient) GetTransactionSignWeight(ctx context.Context, tx *core.Transaction) (*api.TransactionSignWeight, error) {
 	if tx == nil {
 		return nil, fmt.Errorf("empty transaction")
 	}
 	return w.gc.GetTransactionSignWeightCtx(callerCtx(ctx), tx)
 }
 
-func (w *WriteClient) signAndBroadcast(ctx context.Context, tx *core.Transaction, priv *ecdsa.PrivateKey) (string, error) {
+func (w *GRPCWriteClient) signAndBroadcast(ctx context.Context, tx *core.Transaction, priv *ecdsa.PrivateKey) (string, error) {
 	if tx == nil {
 		return "", fmt.Errorf("empty transaction")
 	}

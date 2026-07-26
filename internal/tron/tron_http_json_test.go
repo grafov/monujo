@@ -60,7 +60,7 @@ var _ = Describe("transactionToHTTPJSON", func() {
 		tx, err := transaction.FromJSON([]byte(testRealUnsignedTxJSON))
 		Expect(err).NotTo(HaveOccurred())
 
-		res, err := transactionToHTTPJSON(tx, true)
+		res, err := transactionToHTTPJSON(tx)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(res["visible"]).To(BeTrue())
@@ -97,7 +97,7 @@ var _ = Describe("transactionToHTTPJSON", func() {
 		tx, err := transaction.FromJSON([]byte(testRealSignedTxJSON))
 		Expect(err).NotTo(HaveOccurred())
 
-		res, err := transactionToHTTPJSON(tx, true)
+		res, err := transactionToHTTPJSON(tx)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(res["visible"]).To(BeTrue())
@@ -146,7 +146,7 @@ var _ = Describe("transactionToHTTPJSON", func() {
 			},
 		}
 
-		res, err := transactionToHTTPJSON(tx, true)
+		res, err := transactionToHTTPJSON(tx)
 		Expect(err).NotTo(HaveOccurred())
 
 		rawData := res["raw_data"].(map[string]any)
@@ -174,7 +174,7 @@ var _ = Describe("transactionToHTTPJSON", func() {
 			},
 		}
 
-		_, err = transactionToHTTPJSON(tx, true)
+		_, err = transactionToHTTPJSON(tx)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unsupported contract type"))
 	})

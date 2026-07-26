@@ -100,7 +100,9 @@ monujo multisig info --in tx.cosigned.json [--format ...] [--hmac-*]
 ```
 
 Делает вызов `/wallet/getsignweight` через HTTPS REST (или gRPC при opt-in); broadcast и подпись
-не выполняются.
+не выполняются. На REST `getsignweight` поддерживает контракты
+`TransferContract` и `TriggerSmartContract`; для прочих типов укажите
+`--write-transport grpc`.
 
 ### `monujo multisig broadcast`
 

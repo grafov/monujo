@@ -30,6 +30,7 @@
 |---------------------------------|-------------------------|------------------------------|---------------------------------------------------------------------------|
 | `watch balance`                 | HTTPS (REST, TronGrid)  | `api.trongrid.io` / `api.shasta.trongrid.io` | `GET /v1/accounts/{address}`                                              |
 | `watch txs`                     | HTTPS (REST, TronGrid)  | то же                        | `GET /v1/accounts/{address}/transactions/trc20`                           |
+| `watch permissions`             | HTTPS (REST, TronGrid)  | то же                        | `GET /v1/accounts/{address}` (поля owner/witness/active permission)       |
 | `hot balance`                   | HTTPS (REST, TronGrid)  | то же                        | те же запросы, что у `watch balance`                                      |
 | `hot send-trx`                  | HTTPS (REST)            | то же                        | `POST /wallet/createtransaction`, `POST /wallet/broadcasthex`             |
 | `hot send-usdt`                 | HTTPS (REST)            | то же                        | `POST /wallet/triggersmartcontract`, `POST /wallet/broadcasthex`          |
@@ -85,10 +86,12 @@ CLI выводит **предупреждение в stderr**: публичны�
 
 1. **HTTPS REST по умолчанию.** Чтение и запись через TronGrid идут по
    **HTTPS** на `api.*.trongrid.io`. gRPC — только явный opt-in.
+   `http://` для REST запрещён без `--allow-insecure-http`.
 
 2. **Plaintext gRPC.** TronGrid и типичный `java-tron` на `:50051` принимают
    gRPC **без TLS**. Не включайте `--write-transport grpc` в недоверенной
-   сети без понимания риска MITM.
+   сети без понимания риска MITM. Флаги `--grpc-url` / `--grpc-insecure`
+   без `--write-transport grpc` — ошибка (не молчаливый fallback на REST).
 
 3. **Доверие к узлу.** Узел видит адреса, суммы и подписанные транзакции.
 

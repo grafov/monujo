@@ -63,6 +63,14 @@ var _ = Describe("config", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("validates REST HTTP base URL scheme", func() {
+		Expect(IsHTTPSBaseURL("https://api.trongrid.io")).To(BeTrue())
+		Expect(IsHTTPSBaseURL("http://127.0.0.1:8090")).To(BeFalse())
+		Expect(ValidateRESTHTTPBaseURL("https://api.trongrid.io", false)).To(Succeed())
+		Expect(ValidateRESTHTTPBaseURL("http://127.0.0.1:8090", false)).NotTo(Succeed())
+		Expect(ValidateRESTHTTPBaseURL("http://127.0.0.1:8090", true)).To(Succeed())
+	})
+
 	It("detects TronGrid gRPC hosts", func() {
 		Expect(IsTronGridGRPC(defaultGRPCMainnet)).To(BeTrue())
 		Expect(IsTronGridGRPC("node.example:50051")).To(BeFalse())

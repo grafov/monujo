@@ -60,7 +60,7 @@ var _ = Describe("Offline", func() {
 		mock  *mockWallet
 		conn  *grpc.ClientConn
 		cfg   *config.Config
-		wc    *tron.WriteClient
+		wc    *tron.GRPCWriteClient
 	)
 
 	BeforeEach(func() {
@@ -155,14 +155,18 @@ var _ = Describe("Offline", func() {
 			}
 		})
 
-		It("populates Contract and FeeLimitSun from cfg", func() {
+		It("populates Contract and FeeLimitSun from raw_data", func() {
 			pl, err := tron.BuildUnsignedUSDT(context.Background(), wc, config.NetworkMainnet, 100_000_000, testFromAddr, testToAddr, mustParseBigInt("12345000"), "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pl.Kind).To(Equal(transfer.KindTRC20USDT))
 			Expect(pl.Contract).To(Equal(tron.MainnetUSDTContract))
-			Expect(pl.FeeLimitSun).To(Equal(int64(100_000_000)))
 			Expect(pl.AmountMinimal).To(Equal("12345000"))
 			Expect(pl.Amount).To(ContainSubstring("USDT"))
+
+			summary, err := tron.DecodeRawDataSummary(pl.RawDataHex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pl.FeeLimitSun).To(Equal(summary.FeeLimitSun))
+			Expect(pl.FeeLimitSun).To(BeNumerically(">", 0))
 		})
 	})
 

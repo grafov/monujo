@@ -44,9 +44,9 @@ type OfflineService struct {
 	cfg *config.Config
 	ks  string
 
-	// onlineWriter and broadcaster exist to make Build/Broadcast testable
-	// without a real gRPC server. Production callers leave them nil and the
-	// service falls back to tron.NewTransactionWriterFromConfig.
+	// onlineWriter makes Build/Broadcast testable without a real node.
+	// Production callers leave it nil; the service falls back to
+	// tron.NewTransactionWriterFromConfig.
 	onlineWriter func() (tron.TransactionWriter, func(), error)
 
 	// confirmIn is os.Stdin in production, overridable in tests.
@@ -358,7 +358,7 @@ type BroadcastResult struct {
 }
 
 // Broadcast reads a signed envelope, verifies fields, asks for confirmation
-// (unless Yes), and forwards to the gRPC node.
+// (unless Yes), and forwards via the configured write transport.
 func (o *OfflineService) Broadcast(ctx context.Context, opts BroadcastOptions) (BroadcastResult, error) {
 	var zero BroadcastResult
 	blob, err := os.ReadFile(opts.InPath)
@@ -494,6 +494,9 @@ func verifyPayloadAgainstSummary(p transfer.UnsignedTransferPayload, s tron.RawD
 	if p.Kind == transfer.KindTRC20USDT && p.Contract != s.Contract {
 		return fmt.Errorf("contract mismatch: payload=%q raw_data=%q", p.Contract, s.Contract)
 	}
+	if p.Kind == transfer.KindTRC20USDT && p.FeeLimitSun != s.FeeLimitSun {
+		return fmt.Errorf("fee_limit mismatch: payload=%d raw_data=%d", p.FeeLimitSun, s.FeeLimitSun)
+	}
 	if p.Expiration != s.ExpirationMs {
 		return fmt.Errorf("expiration mismatch: payload=%d raw_data=%d", p.Expiration, s.ExpirationMs)
 	}
@@ -524,6 +527,9 @@ func verifySignedAgainstSummary(p transfer.SignedTransferPayload, s tron.RawData
 	}
 	if p.Kind == transfer.KindTRC20USDT && p.Contract != s.Contract {
 		return fmt.Errorf("contract mismatch: payload=%q raw_data=%q", p.Contract, s.Contract)
+	}
+	if p.Kind == transfer.KindTRC20USDT && p.FeeLimitSun != s.FeeLimitSun {
+		return fmt.Errorf("fee_limit mismatch: payload=%d raw_data=%d", p.FeeLimitSun, s.FeeLimitSun)
 	}
 	if p.Expiration != s.ExpirationMs {
 		return fmt.Errorf("expiration mismatch: payload=%d raw_data=%d", p.Expiration, s.ExpirationMs)

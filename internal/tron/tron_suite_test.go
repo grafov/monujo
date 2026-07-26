@@ -28,7 +28,7 @@ import (
 // public API of the package. The suite is split into:
 //
 //   - black-box specs in [package tron_test] for the public surface
-//     (ValidateBase58Address, USDTContractForNetwork, ReadClient, WriteClient);
+//     (ValidateBase58Address, USDTContractForNetwork, ReadClient, GRPCWriteClient);
 //   - white-box specs in [package tron] for unexported helpers
 //     (truncate, transactionIDHex);
 //   - opt-in integration specs guarded by a build tag and an env switch.

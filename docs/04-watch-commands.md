@@ -16,9 +16,10 @@ monujo watch
 ```
 
 Глобальные флаги (`--network`, `--output`, `--http-url`, `--api-key`,
-`--keystore-dir`) применимы к обеим подкомандам, но `--keystore-dir` и
-`--grpc-url` для `watch` не используются (они нужны только горячему
-кошельку).
+`--keystore-dir`, `--write-transport`) применимы ко всем подкомандам
+группы. `--keystore-dir` нужен `watch permissions` для подсветки
+локальных ключей; `--grpc-url` / `--grpc-insecure` для `watch` не
+используются (только при `--write-transport grpc` для команд записи).
 
 ---
 

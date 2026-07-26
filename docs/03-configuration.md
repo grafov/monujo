@@ -16,6 +16,7 @@
 | `--write-transport <t>` | — | `rest` | Транспорт записи: `rest` (HTTPS) или `grpc` (opt-in). |
 | `--grpc-url <host:port>` | — | по сети | Адрес gRPC; только с `--write-transport grpc`. |
 | `--grpc-insecure` | — | `false` | Plaintext gRPC (нужен для TronGrid и большинства full node). |
+| `--allow-insecure-http` | — | `false` | Разрешить `http://` для REST (небезопасно; предупреждение в stderr). Без флага REST требует `https://`. |
 | `--api-key <key>` | `MONUJO_TRONGRID_API_KEY` | пусто | API‑ключ TronGrid для повышенных лимитов запросов. |
 | `--keystore-dir <path>` | `MONUJO_KEYSTORE_DIR` | `~/.config/monujo/keystore` | Каталог зашифрованных файлов кошельков. |
 | `--version` | — | — | Показать версию и git‑коммит, заложенные при сборке. |
@@ -78,6 +79,10 @@ keystore сеть всегда хранится в нижнем регистре
 обрезается. Никакой авто‑префиксации `https://` нет — указывайте URL
 полностью.
 
+При `--write-transport rest` схема должна быть `https://`. Для
+локального узла с `http://` передайте `--allow-insecure-http`
+(предупреждение в stderr).
+
 ### `--write-transport`
 
 Тип: строка. Допустимые значения:
@@ -89,7 +94,9 @@ keystore сеть всегда хранится в нижнем регистре
 
 ### `--grpc-url` и `--grpc-insecure`
 
-Имеют смысл только при `--write-transport grpc`.
+Имеют смысл только при `--write-transport grpc`. Если при дефолтном
+`rest` явно передать `--grpc-url` или `--grpc-insecure`, CLI завершится
+ошибкой (нужно добавить `--write-transport grpc`).
 
 По умолчанию:
 

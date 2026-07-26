@@ -45,9 +45,10 @@ Postulas Go 1.24+ (vidu `go.mod`).
 | `MONUJO_IMPORT_KEY`                      | Deksesuma privata ŝlosilo por `wallet import` se `--key-hex` estas preterlasita. |
 | `--network`                              | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas).          |
 | `--output`                               | `table` aŭ `json`.                                                               |
-| `--http-url` / `--grpc-url`              | Anstataŭigi TronGrid HTTP-bazan URL-on kaj gRPC `host:port`.                     |
-| `--write-transport`                      | `rest` (defaŭlte, HTTPS) — elektita pro sekureco; `grpc` (opt-in) — nur se vi kontrolas la nodon aŭ akceptas plaintext-riskon ĉe publika TronGrid. |
-| `--grpc-url` / `--grpc-insecure`         | Nur kun `--write-transport grpc` (TronGrid gRPC estas plaintext).                  |
+| `--http-url`                             | Anstataŭigi TronGrid HTTPS-bazan URL-on (lego + REST-skribo; bezonas `https://`, alie `--allow-insecure-http`). |
+| `--write-transport`                      | Advanced: `rest` (defaŭlte, HTTPS) aŭ `grpc` (opt-in). |
+| `--grpc-url` / `--grpc-insecure`         | Advanced: nur kun `--write-transport grpc` (TronGrid gRPC estas plaintext). |
+| `--allow-insecure-http`                  | Advanced: permesi `http://` por REST (nesekure; averto al stderr). |
 | `--force`                                | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj. |
 
 ## Nur-lega (malvarma adreso, reta komputilo)
@@ -199,6 +200,8 @@ La CLI-surfaco ankoraŭ estas formata; dum la ĉefa versio estas `0.x` ni faras 
 - **`--addr`** nomas la subjekton por komandoj sen `--to` ricevanto en la CLI: `hot balance`, `wallet check`, kaj `offline sign`. **`--from` / `--to`** estas uzataj por transigoj: `hot send-trx`, `hot send-usdt`, kaj `offline build`. Nomo vs base58-malambiguigo estas aŭtomata (sama heŭristiko kiel antaŭe).
 - `hot balance` ne plu petas la ŝlosilujan pasfrazon. La adreso estas legata el la plarteksta metadateno de la monuja dosiero; integreco de la ĉifrita ŝlosilo ankoraŭ estas kontrolata la venontan fojon kiam vi subskribas ion.
 - La aparta komando `hot activate` estis forigita; uzu `hot send-trx` por la sama efiko.
+- **Defaŭlta skriba transporto estas HTTPS REST** (`--write-transport rest`). Skriptoj kiuj nur pasis `--grpc-url` / `--grpc-insecure` nun ankaŭ bezonas `--write-transport grpc` (alie la CLI eraras). REST postulas `https://` en `--http-url`, aŭ `--allow-insecure-http`.
+- `hot send-trx` / `hot send-usdt` petas konfirmon (`[y/N]`) antaŭ la pasfrazo; uzu `--yes` en skriptoj.
 
 ## Permesilo
 

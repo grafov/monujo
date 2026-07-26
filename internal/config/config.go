@@ -63,6 +63,8 @@ type Config struct {
 	KeystoreDir    string
 	WriteTransport WriteTransport
 	GRPCInsecure   bool
+	// AllowInsecureHTTP permits http:// for REST write (and HTTP reads) with a warning.
+	AllowInsecureHTTP bool
 	// DefaultFeeLimitSun is the maximum fee (sun) for TRC-20 contract calls.
 	DefaultFeeLimitSun int64
 }
@@ -124,6 +126,22 @@ func IsTronGridGRPC(addr string) bool {
 	default:
 		return false
 	}
+}
+
+// IsHTTPSBaseURL reports whether baseURL uses the https scheme.
+func IsHTTPSBaseURL(baseURL string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(baseURL)), "https://")
+}
+
+// ValidateRESTHTTPBaseURL requires https:// for REST write unless allowInsecure is set.
+func ValidateRESTHTTPBaseURL(baseURL string, allowInsecure bool) error {
+	if IsHTTPSBaseURL(baseURL) {
+		return nil
+	}
+	if allowInsecure {
+		return nil
+	}
+	return fmt.Errorf("REST write requires https:// HTTP base URL (got %q); use https:// or pass --allow-insecure-http", baseURL)
 }
 
 // ParseOutputFormat parses --output.

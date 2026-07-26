@@ -201,13 +201,13 @@ func mustParseBigInt(s string) *big.Int {
 	return v
 }
 
-var _ = Describe("WriteClient", func() {
+var _ = Describe("GRPCWriteClient", func() {
 	var (
 		calls *recordedCalls
 		mock  *mockWallet
 		conn  *grpc.ClientConn
 		cfg   *config.Config
-		wc    *tron.WriteClient
+		wc    *tron.GRPCWriteClient
 		priv  *ecdsa.PrivateKey
 	)
 

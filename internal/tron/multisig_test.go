@@ -78,7 +78,7 @@ var _ = Describe("Multisig participation", func() {
 		mock  *mockWallet
 		conn  *grpc.ClientConn
 		cfg   *config.Config
-		wc    *tron.WriteClient
+		wc    *tron.GRPCWriteClient
 	)
 
 	BeforeEach(func() {

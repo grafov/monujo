@@ -44,9 +44,10 @@ Requires Go 1.24+ (see `go.mod`).
 | `MONUJO_IMPORT_KEY`                      | Hex private key for `wallet import` if `--key-hex` is omitted.          |
 | `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).       |
 | `--output`                               | `table` or `json`.                                                      |
-| `--http-url`                             | Override TronGrid HTTP base URL (read + default write transport).       |
-| `--write-transport`                      | `rest` (default, HTTPS) — chosen for security; `grpc` (opt-in) — only when you control the node or accept plaintext risk on public TronGrid. |
-| `--grpc-url` / `--grpc-insecure`         | Used only with `--write-transport grpc` (TronGrid gRPC is plaintext).     |
+| `--http-url`                             | Override TronGrid HTTP base URL (read + default write transport; must be `https://` unless `--allow-insecure-http`). |
+| `--write-transport`                      | Advanced: `rest` (default, HTTPS) or `grpc` (opt-in).                                 |
+| `--grpc-url` / `--grpc-insecure`         | Advanced: only with `--write-transport grpc` (TronGrid gRPC is plaintext).            |
+| `--allow-insecure-http`                  | Advanced: allow `http://` for REST (insecure; warns on stderr).                       |
 | `--force`                                | Skip network-mismatch confirmation on supported hot/offline operations. |
 
 ## Watch-only (cold address, online PC)
@@ -198,6 +199,8 @@ The CLI surface is still being shaped; while the major version is `0.x` we do ha
 - **`--addr`** names the subject for commands without a `--to` recipient on the CLI: `hot balance`, `wallet check`, and `offline sign`. **`--from` / `--to`** are used for transfers: `hot send-trx`, `hot send-usdt`, and `offline build`. Name vs base58 disambiguation is automatic (same heuristic as before).
 - `hot balance` no longer prompts for the keystore passphrase. The address is read from the plaintext metadata of the wallet file; integrity of the encrypted key is still verified the next time you sign anything.
 - The separate `hot activate` command was removed; use `hot send-trx` for the same effect.
+- **Default write transport is HTTPS REST** (`--write-transport rest`). Scripts that only passed `--grpc-url` / `--grpc-insecure` must now also pass `--write-transport grpc` (otherwise the CLI errors). REST requires an `https://` `--http-url` unless you pass `--allow-insecure-http`.
+- `hot send-trx` / `hot send-usdt` ask for interactive confirmation (`[y/N]`) before the passphrase; use `--yes` in scripts.
 
 ## License
 

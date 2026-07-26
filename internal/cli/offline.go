@@ -30,7 +30,7 @@ import (
 func newOfflineCmd() *cobra.Command {
 	o := &cobra.Command{
 		Use:   "offline",
-		Short: "Air-gapped wallet operations: build (online) → sign (offline) → broadcast (online)",
+		Short: "Air-gapped wallet operations: build → sign → broadcast (finish within ~60s)",
 		Long: `Three-step offline signing workflow for Tron transfers.
 
 Run "build" online to fetch a fresh ref-block and assemble an unsigned
@@ -76,7 +76,6 @@ func newOfflineBuildCmd() *cobra.Command {
 		out       string
 		hmacPass  string
 		hmacEnv   string
-		yes       bool
 		overwrite bool
 	)
 	cmd := &cobra.Command{
@@ -127,7 +126,6 @@ else as a name.`,
 
 			svc := app.NewOfflineService(cfg)
 			_, err = svc.Build(context.Background(), opts)
-			_ = yes
 			return err
 		},
 	}
@@ -139,7 +137,6 @@ else as a name.`,
 	cmd.Flags().StringVar(&out, "out", "", "Path for the unsigned envelope JSON file (use - for stdout)")
 	cmd.Flags().StringVar(&hmacPass, "hmac-passphrase", "", "Passphrase for HMAC integrity protection (unsafe: visible in process listings)")
 	cmd.Flags().StringVar(&hmacEnv, "hmac-passphrase-env", "", "Read HMAC passphrase from this environment variable (e.g. MONUJO_HMAC)")
-	cmd.Flags().BoolVar(&yes, "yes", false, "Reserved for future build-time confirmations (currently unused)")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Replace --out if it already exists")
 	_ = cmd.MarkFlagRequired("from")
 	_ = cmd.MarkFlagRequired("to")
@@ -254,7 +251,7 @@ func newOfflineBroadcastCmd() *cobra.Command {
 		Short: "Online: broadcast a previously signed transfer file (no keystore needed)",
 		Long: `Read a signed transfer envelope, verify its HMAC (if any), recompute
 the human-readable fields from raw_data, ask for confirmation, then send
-to the configured Tron node via gRPC.`,
+to the configured Tron node (HTTPS REST by default; gRPC with --write-transport grpc).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
