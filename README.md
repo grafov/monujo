@@ -39,18 +39,18 @@ Requires Go 1.24+ (see `go.mod`).
 
 ## Configuration
 
-| Env / flag                               | Purpose                                                                 |
-|------------------------------------------|-------------------------------------------------------------------------|
-| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Optional TronGrid API key (recommended for higher rate limits).         |
-| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Wallet files directory (default: `~/.config/monujo/keystore`).          |
-| `MONUJO_IMPORT_KEY`                      | Hex private key for `wallet import` if `--key-hex` is omitted.          |
-| `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).       |
-| `--output`                               | `table` or `json`.                                                      |
+| Env / flag                               | Purpose                                                                                                              |
+|------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Optional TronGrid API key (recommended for higher rate limits).                                                      |
+| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Wallet files directory (default: `~/.config/monujo/keystore`).                                                       |
+| `MONUJO_IMPORT_KEY`                      | Hex private key for `wallet import` if `--key-hex` is omitted.                                                       |
+| `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).                                                    |
+| `--output`                               | `table` or `json`.                                                                                                   |
 | `--http-url`                             | Override TronGrid HTTP base URL (read + default write transport; must be `https://` unless `--allow-insecure-http`). |
-| `--write-transport`                      | Advanced: `rest` (default, HTTPS) or `grpc` (opt-in).                                 |
-| `--grpc-url` / `--grpc-insecure`         | Advanced: only with `--write-transport grpc` (TronGrid gRPC is plaintext).            |
-| `--allow-insecure-http`                  | Advanced: allow `http://` for REST (insecure; warns on stderr).                       |
-| `--force`                                | Skip network-mismatch confirmation on supported hot/offline operations. |
+| `--write-transport`                      | Advanced: `rest` (default, HTTPS) or `grpc` (opt-in).                                                                |
+| `--grpc-url` / `--grpc-insecure`         | Advanced: only with `--write-transport grpc` (TronGrid gRPC is plaintext).                                           |
+| `--allow-insecure-http`                  | Advanced: allow `http://` for REST (insecure; warns on stderr).                                                      |
+| `--force`                                | Skip network-mismatch confirmation on supported hot/offline operations.                                              |
 
 ## Watch-only (cold address, online PC)
 

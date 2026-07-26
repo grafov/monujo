@@ -41,18 +41,18 @@ Postulas Go 1.24+ (vidu `go.mod`).
 
 ## Agordado
 
-| Medivariablo / flago                     | Celo                                                                             |
-|------------------------------------------|----------------------------------------------------------------------------------|
-| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Nedeviga TronGrid API-ŝlosilo (rekomendata por pli altaj limoj).                 |
-| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Dosierujo por monujaj dosieroj (defaŭlte: `~/.config/monujo/keystore`).          |
-| `MONUJO_IMPORT_KEY`                      | Deksesuma privata ŝlosilo por `wallet import` se `--key-hex` estas preterlasita. |
-| `--network`                              | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas).          |
-| `--output`                               | `table` aŭ `json`.                                                               |
+| Medivariablo / flago                     | Celo                                                                                                            |
+|------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Nedeviga TronGrid API-ŝlosilo (rekomendata por pli altaj limoj).                                                |
+| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Dosierujo por monujaj dosieroj (defaŭlte: `~/.config/monujo/keystore`).                                         |
+| `MONUJO_IMPORT_KEY`                      | Deksesuma privata ŝlosilo por `wallet import` se `--key-hex` estas preterlasita.                                |
+| `--network`                              | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas).                                         |
+| `--output`                               | `table` aŭ `json`.                                                                                              |
 | `--http-url`                             | Anstataŭigi TronGrid HTTPS-bazan URL-on (lego + REST-skribo; bezonas `https://`, alie `--allow-insecure-http`). |
-| `--write-transport`                      | Advanced: `rest` (defaŭlte, HTTPS) aŭ `grpc` (opt-in). |
-| `--grpc-url` / `--grpc-insecure`         | Advanced: nur kun `--write-transport grpc` (TronGrid gRPC estas plaintext). |
-| `--allow-insecure-http`                  | Advanced: permesi `http://` por REST (nesekure; averto al stderr). |
-| `--force`                                | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj. |
+| `--write-transport`                      | Advanced: `rest` (defaŭlte, HTTPS) aŭ `grpc` (opt-in).                                                          |
+| `--grpc-url` / `--grpc-insecure`         | Advanced: nur kun `--write-transport grpc` (TronGrid gRPC estas plaintext).                                     |
+| `--allow-insecure-http`                  | Advanced: permesi `http://` por REST (nesekure; averto al stderr).                                              |
+| `--force`                                | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj.                                |
 
 ## Nur-lega (malvarma adreso, reta komputilo)
 

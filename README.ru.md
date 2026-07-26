@@ -40,18 +40,18 @@ make build
 
 ## Конфигурация
 
-| Переменная / флаг | Назначение |
-| --- | --- |
-| `MONUJO_TRONGRID_API_KEY` / `--api-key` | Опциональный API-ключ TronGrid (рекомендуется для более высоких лимитов). |
-| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Директория файлов кошельков (по умолчанию: `~/.config/monujo/keystore`). |
-| `MONUJO_IMPORT_KEY` | Hex-приватный ключ для `wallet import`, если опущен `--key-hex`. |
-| `--network` | `mainnet` (по умолчанию) или `shasta` (тестовая сеть; контракт USDT отличается). |
-| `--output` | `table` или `json`. |
-| `--http-url` | Переопределение базового HTTPS URL TronGrid (чтение + REST-запись; нужен `https://`, иначе `--allow-insecure-http`). |
-| `--write-transport` | Advanced: `rest` (по умолчанию, HTTPS) или `grpc` (opt-in). |
-| `--grpc-url` / `--grpc-insecure` | Advanced: только с `--write-transport grpc` (у TronGrid gRPC — plaintext). |
-| `--allow-insecure-http` | Advanced: разрешить `http://` для REST (небезопасно; предупреждение в stderr). |
-| `--force` | Пропуск подтверждения несовпадения сети в поддерживаемых горячих/офлайн операциях. |
+| Переменная / флаг                        | Назначение                                                                                                           |
+|------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `MONUJO_TRONGRID_API_KEY` / `--api-key`  | Опциональный API-ключ TronGrid (рекомендуется для более высоких лимитов).                                            |
+| `MONUJO_KEYSTORE_DIR` / `--keystore-dir` | Директория файлов кошельков (по умолчанию: `~/.config/monujo/keystore`).                                             |
+| `MONUJO_IMPORT_KEY`                      | Hex-приватный ключ для `wallet import`, если опущен `--key-hex`.                                                     |
+| `--network`                              | `mainnet` (по умолчанию) или `shasta` (тестовая сеть; контракт USDT отличается).                                     |
+| `--output`                               | `table` или `json`.                                                                                                  |
+| `--http-url`                             | Переопределение базового HTTPS URL TronGrid (чтение + REST-запись; нужен `https://`, иначе `--allow-insecure-http`). |
+| `--write-transport`                      | Advanced: `rest` (по умолчанию, HTTPS) или `grpc` (opt-in).                                                          |
+| `--grpc-url` / `--grpc-insecure`         | Advanced: только с `--write-transport grpc` (у TronGrid gRPC — plaintext).                                           |
+| `--allow-insecure-http`                  | Advanced: разрешить `http://` для REST (небезопасно; предупреждение в stderr).                                       |
+| `--force`                                | Пропуск подтверждения несовпадения сети в поддерживаемых горячих/офлайн операциях.                                   |
 
 ## Только для чтения (холодный адрес, ПК с интернетом)
 
