@@ -73,6 +73,10 @@ var _ = Describe("integration: tron", Ordered, func() {
 			"",
 		)
 		Expect(err).NotTo(HaveOccurred())
+		if os.Getenv("MONUJO_TRON_WRITE_TRANSPORT") == "grpc" {
+			cfg.WriteTransport = config.WriteTransportGRPC
+			cfg.GRPCInsecure = true
+		}
 
 		toAddr = strings.TrimSpace(os.Getenv("MONUJO_TRON_TEST_ADDR_TO"))
 		readAddr = strings.TrimSpace(os.Getenv("MONUJO_TRON_TEST_ADDR_READ"))
@@ -112,7 +116,7 @@ var _ = Describe("integration: tron", Ordered, func() {
 		})
 	})
 
-	Describe("WriteClient against Shasta", func() {
+	Describe("GRPCWriteClient against Shasta", func() {
 		BeforeEach(func() {
 			if keyHex == "" || toAddr == "" {
 				Skip("MONUJO_TRON_TEST_KEY / MONUJO_TRON_TEST_ADDR_TO not set")
@@ -132,7 +136,7 @@ var _ = Describe("integration: tron", Ordered, func() {
 			fromAddrBytes := crypto.PubkeyToAddress(priv.PublicKey).Bytes()
 			Expect(fromAddrBytes).NotTo(BeEmpty())
 
-			wc, err := tron.NewWriteClientFromConfig(cfg)
+			wc, err := tron.NewTransactionWriterFromConfig(cfg)
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func() { _ = wc.Close() })
 

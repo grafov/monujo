@@ -45,8 +45,10 @@ Postulas Go 1.24+ (vidu `go.mod`).
 | `MONUJO_IMPORT_KEY`                      | Deksesuma privata ŝlosilo por `wallet import` se `--key-hex` estas preterlasita. |
 | `--network`                              | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas).          |
 | `--output`                               | `table` aŭ `json`.                                                               |
-| `--http-url` / `--grpc-url`              | Anstataŭigi TronGrid HTTP-bazan URL-on kaj gRPC `host:port`.                     |
-| `--grpc-insecure`                        | Uzi neĉifritan gRPC nur por fidindaj lokaj/privataj nodoj.                       |
+| `--http-url`                             | Anstataŭigi TronGrid HTTPS-bazan URL-on (lego + REST-skribo; bezonas `https://`, alie `--allow-insecure-http`). |
+| `--write-transport`                      | Advanced: `rest` (defaŭlte, HTTPS) aŭ `grpc` (opt-in). |
+| `--grpc-url` / `--grpc-insecure`         | Advanced: nur kun `--write-transport grpc` (TronGrid gRPC estas plaintext). |
+| `--allow-insecure-http`                  | Advanced: permesi `http://` por REST (nesekure; averto al stderr). |
 | `--force`                                | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj. |
 
 ## Nur-lega (malvarma adreso, reta komputilo)
@@ -124,7 +126,7 @@ Se vi rulas **`hot balance`**, **`hot send-trx`**, aŭ **`hot send-usdt`** kun `
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Varmaj sendoj uzas **gRPC super TLS** al Tron-plena nodo (defaŭlte `grpc.trongrid.io:50051` en mainnet) kaj subskribas en-proceze. Uzu `--grpc-insecure` nur por fidindaj lokaj/privataj nodoj. Vi bezonas sufiĉe da **TRX** por bendolarĝo/energio; USDT-transigoj konsumas energion — financu la varman adreson laŭe.
+Varmaj sendoj defaŭlte uzas **HTTPS REST** al TronGrid (`https://api.trongrid.io` en mainnet) kaj subskribas en-proceze. HTTPS REST estas defaŭlta ĉar publikaj gRPC-finoj de TronGrid estas plaintext (sen TLS). Uzu `--write-transport grpc` nur por via propra nodo aŭ se vi eksplicite akceptas la MITM-riskon. Vi bezonas sufiĉe da **TRX** por bendolarĝo/energio; USDT-transigoj konsumas energion.
 
 ## Sekurecaj notoj
 
@@ -198,6 +200,8 @@ La CLI-surfaco ankoraŭ estas formata; dum la ĉefa versio estas `0.x` ni faras 
 - **`--addr`** nomas la subjekton por komandoj sen `--to` ricevanto en la CLI: `hot balance`, `wallet check`, kaj `offline sign`. **`--from` / `--to`** estas uzataj por transigoj: `hot send-trx`, `hot send-usdt`, kaj `offline build`. Nomo vs base58-malambiguigo estas aŭtomata (sama heŭristiko kiel antaŭe).
 - `hot balance` ne plu petas la ŝlosilujan pasfrazon. La adreso estas legata el la plarteksta metadateno de la monuja dosiero; integreco de la ĉifrita ŝlosilo ankoraŭ estas kontrolata la venontan fojon kiam vi subskribas ion.
 - La aparta komando `hot activate` estis forigita; uzu `hot send-trx` por la sama efiko.
+- **Defaŭlta skriba transporto estas HTTPS REST** (`--write-transport rest`). Skriptoj kiuj nur pasis `--grpc-url` / `--grpc-insecure` nun ankaŭ bezonas `--write-transport grpc` (alie la CLI eraras). REST postulas `https://` en `--http-url`, aŭ `--allow-insecure-http`.
+- `hot send-trx` / `hot send-usdt` petas konfirmon (`[y/N]`) antaŭ la pasfrazo; uzu `--yes` en skriptoj.
 
 ## Permesilo
 

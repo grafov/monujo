@@ -97,14 +97,14 @@ func decodeRawDataHex(rawDataHex string) (*core.TransactionRaw, error) {
 	return &raw, nil
 }
 
-// BuildUnsignedTRX prepares an unsigned TRX transfer payload using the live
-// gRPC node (only the node's CreateTransaction2 call, no signing). The
+// BuildUnsignedTRX prepares an unsigned TRX transfer payload using the
+// configured write transport (CreateTRXTransfer, no signing). The
 // resulting payload can be carried to an offline machine for signing.
 //
 // The function validates from/to addresses locally before any RPC.
-func BuildUnsignedTRX(ctx context.Context, w *WriteClient, from, to string, amountSun int64, note string) (transfer.UnsignedTransferPayload, error) {
+func BuildUnsignedTRX(ctx context.Context, w TransactionWriter, net config.Network, from, to string, amountSun int64, note string) (transfer.UnsignedTransferPayload, error) {
 	var zero transfer.UnsignedTransferPayload
-	if w == nil {
+	if transactionWriterIsNil(w) {
 		return zero, errors.New("offline: nil write client")
 	}
 	if err := ValidateBase58Address(from); err != nil {
@@ -116,16 +116,9 @@ func BuildUnsignedTRX(ctx context.Context, w *WriteClient, from, to string, amou
 	if amountSun <= 0 {
 		return zero, errors.New("offline: trx amount must be positive")
 	}
-	if err := w.bindContext(ctx); err != nil {
-		return zero, err
-	}
-	txe, err := w.gc.Transfer(from, to, amountSun)
+	tx, err := w.CreateTRXTransfer(ctx, from, to, amountSun)
 	if err != nil {
 		return zero, err
-	}
-	tx := txe.GetTransaction()
-	if tx == nil {
-		return zero, errors.New("offline: empty transaction extension")
 	}
 	raw := tx.GetRawData()
 	rawHex, err := rawDataToHex(raw)
@@ -138,7 +131,7 @@ func BuildUnsignedTRX(ctx context.Context, w *WriteClient, from, to string, amou
 	}
 	return transfer.UnsignedTransferPayload{
 		Version:       transfer.EnvelopeVersion,
-		Chain:         chainForNetwork(w.cfg.Network),
+		Chain:         chainForNetwork(net),
 		Kind:          transfer.KindTRX,
 		From:          from,
 		To:            to,
@@ -153,12 +146,12 @@ func BuildUnsignedTRX(ctx context.Context, w *WriteClient, from, to string, amou
 }
 
 // BuildUnsignedUSDT prepares an unsigned TRC-20 USDT transfer payload using
-// the live gRPC node (TRC20Send), without signing. The contract address is
-// taken from cfg.Network via [USDTContractForNetwork], matching what the
-// online hot wallet would use.
-func BuildUnsignedUSDT(ctx context.Context, w *WriteClient, from, to string, amount *big.Int, note string) (transfer.UnsignedTransferPayload, error) {
+// the configured write transport (CreateTRC20Transfer, no signing). The
+// contract address is taken from cfg.Network via [USDTContractForNetwork],
+// matching what the online hot wallet would use.
+func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Network, feeLimitSun int64, from, to string, amount *big.Int, note string) (transfer.UnsignedTransferPayload, error) {
 	var zero transfer.UnsignedTransferPayload
-	if w == nil {
+	if transactionWriterIsNil(w) {
 		return zero, errors.New("offline: nil write client")
 	}
 	if err := ValidateBase58Address(from); err != nil {
@@ -170,17 +163,10 @@ func BuildUnsignedUSDT(ctx context.Context, w *WriteClient, from, to string, amo
 	if amount == nil || amount.Sign() <= 0 {
 		return zero, errors.New("offline: usdt amount must be positive")
 	}
-	if err := w.bindContext(ctx); err != nil {
-		return zero, err
-	}
-	contract := USDTContractForNetwork(w.cfg.Network)
-	txe, err := w.gc.TRC20Send(from, to, contract, amount, w.cfg.DefaultFeeLimitSun)
+	contract := USDTContractForNetwork(net)
+	tx, err := w.CreateTRC20Transfer(ctx, from, to, contract, amount)
 	if err != nil {
 		return zero, err
-	}
-	tx := txe.GetTransaction()
-	if tx == nil {
-		return zero, errors.New("offline: empty transaction extension")
 	}
 	raw := tx.GetRawData()
 	rawHex, err := rawDataToHex(raw)
@@ -191,16 +177,20 @@ func BuildUnsignedUSDT(ctx context.Context, w *WriteClient, from, to string, amo
 	if err != nil {
 		return zero, err
 	}
+	fee := raw.GetFeeLimit()
+	if fee == 0 {
+		fee = feeLimitSun
+	}
 	return transfer.UnsignedTransferPayload{
 		Version:       transfer.EnvelopeVersion,
-		Chain:         chainForNetwork(w.cfg.Network),
+		Chain:         chainForNetwork(net),
 		Kind:          transfer.KindTRC20USDT,
 		From:          from,
 		To:            to,
 		Amount:        domain.FormatMinimalUSDT(amount) + " USDT",
 		AmountMinimal: amount.String(),
 		Contract:      contract,
-		FeeLimitSun:   w.cfg.DefaultFeeLimitSun,
+		FeeLimitSun:   fee,
 		RawDataHex:    rawHex,
 		Expiration:    raw.GetExpiration(),
 		Timestamp:     raw.GetTimestamp(),
@@ -234,10 +224,10 @@ func SignRawData(rawDataHex string, priv *ecdsa.PrivateKey) (sigHex, txIDHex str
 }
 
 // BroadcastSigned reassembles a core.Transaction from rawDataHex+signature
-// and broadcasts it via the WriteClient's gRPC connection. Returns the txid
+// and broadcasts it via the configured write transport. Returns the txid
 // (0x-prefixed) on success.
-func BroadcastSigned(ctx context.Context, w *WriteClient, rawDataHex, sigHex string) (string, error) {
-	if w == nil {
+func BroadcastSigned(ctx context.Context, w TransactionWriter, rawDataHex, sigHex string) (string, error) {
+	if transactionWriterIsNil(w) {
 		return "", errors.New("offline: nil write client")
 	}
 	raw, err := decodeRawDataHex(rawDataHex)
@@ -251,9 +241,6 @@ func BroadcastSigned(ctx context.Context, w *WriteClient, rawDataHex, sigHex str
 	if len(sig) != 65 {
 		return "", fmt.Errorf("offline: signature must be 65 bytes, got %d", len(sig))
 	}
-	if err := w.bindContext(ctx); err != nil {
-		return "", err
-	}
 	tx := &core.Transaction{
 		RawData:   raw,
 		Signature: [][]byte{sig},
@@ -262,12 +249,8 @@ func BroadcastSigned(ctx context.Context, w *WriteClient, rawDataHex, sigHex str
 	if err != nil {
 		return "", err
 	}
-	ret, err := w.gc.Broadcast(tx)
-	if err != nil {
+	if err := w.BroadcastTransaction(ctx, tx); err != nil {
 		return "", err
-	}
-	if ret.GetCode() != 0 {
-		return "", fmt.Errorf("broadcast: %s", string(ret.GetMessage()))
 	}
 	return txid, nil
 }

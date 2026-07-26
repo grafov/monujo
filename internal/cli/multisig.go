@@ -28,13 +28,12 @@ import (
 func newMultisigCmd() *cobra.Command {
 	m := &cobra.Command{
 		Use:   "multisig",
-		Short: "Participate in Tron multi-signature transactions (cosign, broadcast, info)",
-		Long: `Participate in Tron multi-signature transactions that were created by
-somebody else (TronWeb, TronLink, TronScan, or any other Tron tool).
+		Short: "Cosign/broadcast only (no propose/setup): participate in Tron multisig",
+		Long: `Cosign and broadcast only — monujo does NOT create/propose multisig
+transactions or reconfigure account permissions. Setup those elsewhere
+(TronWeb, TronLink, TronScan, or any other Tron tool).
 
-monujo does NOT create or propose multisig transactions, and it does NOT
-reconfigure account permissions. Those operations are expected to happen
-outside of monujo (e.g. in TronLink). This command group only:
+This command group only:
 
   - appends a signature to an existing transaction (cosign, offline-safe),
   - inspects the current signature weight against the permission threshold

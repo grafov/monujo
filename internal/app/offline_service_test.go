@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -143,7 +144,7 @@ func newOfflineForTest(fw *fakeWallet, conn *grpc.ClientConn) (svc *OfflineServi
 	walletAddr = addr
 
 	svc = NewOfflineService(cfg)
-	svc.onlineWriter = func() (*tron.WriteClient, func(), error) {
+	svc.onlineWriter = func() (tron.TransactionWriter, func(), error) {
 		return trontest.NewWriteClientWithConn(cfg, conn), func() {}, nil
 	}
 	svc.confirmIn = strings.NewReader("y\n")
@@ -262,6 +263,32 @@ var _ = Describe("OfflineService", func() {
 		})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("to mismatch"))
+	})
+
+	It("rejects fee_limit mismatch for USDT payloads", func() {
+		summary := tron.RawDataSummary{
+			Kind:         transfer.KindTRC20USDT,
+			From:         knownToAddr,
+			To:           otherToAddr,
+			AmountStr:    "1 USDT",
+			AmountWei:    big.NewInt(1000000),
+			Contract:     tron.MainnetUSDTContract,
+			FeeLimitSun:  100_000_000,
+			ExpirationMs: 1,
+		}
+		pl := transfer.UnsignedTransferPayload{
+			Kind:          transfer.KindTRC20USDT,
+			From:          summary.From,
+			To:            summary.To,
+			Amount:        summary.AmountStr,
+			AmountMinimal: "1000000",
+			Contract:      summary.Contract,
+			FeeLimitSun:   42,
+			Expiration:    summary.ExpirationMs,
+		}
+		err := verifyPayloadAgainstSummary(pl, summary)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("fee_limit mismatch"))
 	})
 
 	It("rejects tampered signed amount before broadcast", func() {

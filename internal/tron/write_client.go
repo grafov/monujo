@@ -27,6 +27,7 @@ import (
 	gclient "github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/common"
+	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/grafov/monujo/internal/config"
 	"google.golang.org/grpc"
@@ -35,14 +36,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// WriteClient signs and broadcasts transactions via Tron gRPC (hot wallet).
-type WriteClient struct {
+// GRPCWriteClient signs and broadcasts transactions via Tron gRPC.
+type GRPCWriteClient struct {
 	cfg *config.Config
 	gc  *gclient.GrpcClient
 }
 
-// NewWriteClientFromConfig connects to Tron full node gRPC and returns a ready client.
-func NewWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
+// NewGRPCWriteClientFromConfig connects to a Tron full node over gRPC.
+func NewGRPCWriteClientFromConfig(cfg *config.Config) (*GRPCWriteClient, error) {
 	gc := gclient.NewGrpcClientWithTimeout(cfg.GRPCAddress, 60*time.Second)
 	creds := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
 	if cfg.GRPCInsecure {
@@ -60,50 +61,102 @@ func NewWriteClientFromConfig(cfg *config.Config) (*WriteClient, error) {
 			return nil, err
 		}
 	}
-	return &WriteClient{cfg: cfg, gc: gc}, nil
+	return &GRPCWriteClient{cfg: cfg, gc: gc}, nil
 }
 
 // Close releases the gRPC connection.
-func (w *WriteClient) Close() error {
+func (w *GRPCWriteClient) Close() error {
 	if w.gc != nil && w.gc.Conn != nil {
 		return w.gc.Conn.Close()
 	}
 	return nil
 }
 
-// SendTRX transfers native TRX (amount in sun).
-func (w *WriteClient) SendTRX(ctx context.Context, fromAddr, toAddr string, amountSun int64, priv *ecdsa.PrivateKey) (string, error) {
-	if err := w.bindContext(ctx); err != nil {
-		return "", err
+func callerCtx(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
 	}
-	txe, err := w.gc.Transfer(fromAddr, toAddr, amountSun)
+	return ctx
+}
+
+// SendTRX transfers native TRX (amount in sun).
+func (w *GRPCWriteClient) SendTRX(ctx context.Context, fromAddr, toAddr string, amountSun int64, priv *ecdsa.PrivateKey) (string, error) {
+	txe, err := w.gc.TransferCtx(callerCtx(ctx), fromAddr, toAddr, amountSun)
 	if err != nil {
 		return "", err
 	}
-	return w.signAndBroadcast(txe.GetTransaction(), priv)
+	return w.signAndBroadcast(ctx, txe.GetTransaction(), priv)
 }
 
 // SendUSDT transfers USDT on the configured network using the canonical USDT (or test) contract.
-func (w *WriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string, amount *big.Int, priv *ecdsa.PrivateKey) (string, error) {
-	if err := w.bindContext(ctx); err != nil {
-		return "", err
-	}
+func (w *GRPCWriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string, amount *big.Int, priv *ecdsa.PrivateKey) (string, error) {
 	contract := USDTContractForNetwork(w.cfg.Network)
-	txe, err := w.gc.TRC20Send(fromAddr, toAddr, contract, amount, w.cfg.DefaultFeeLimitSun)
+	txe, err := w.gc.TRC20SendCtx(callerCtx(ctx), fromAddr, toAddr, contract, amount, w.cfg.DefaultFeeLimitSun)
 	if err != nil {
 		return "", err
 	}
-	return w.signAndBroadcast(txe.GetTransaction(), priv)
+	return w.signAndBroadcast(ctx, txe.GetTransaction(), priv)
 }
 
-func (w *WriteClient) bindContext(ctx context.Context) error {
-	if ctx == nil {
-		return w.gc.SetContext(context.Background())
+// CreateTRXTransfer builds an unsigned native TRX transfer via gRPC.
+func (w *GRPCWriteClient) CreateTRXTransfer(ctx context.Context, from, to string, amountSun int64) (*core.Transaction, error) {
+	txe, err := w.gc.TransferCtx(callerCtx(ctx), from, to, amountSun)
+	if err != nil {
+		return nil, err
 	}
-	return w.gc.SetContext(ctx)
+	tx := txe.GetTransaction()
+	if tx == nil {
+		return nil, fmt.Errorf("empty transaction")
+	}
+	if ret := txe.GetResult(); ret != nil && ret.GetCode() != 0 {
+		return nil, fmt.Errorf("create trx: %s", string(ret.GetMessage()))
+	}
+	return tx, nil
 }
 
-func (w *WriteClient) signAndBroadcast(tx *core.Transaction, priv *ecdsa.PrivateKey) (string, error) {
+// CreateTRC20Transfer builds an unsigned TRC-20 transfer via gRPC.
+func (w *GRPCWriteClient) CreateTRC20Transfer(ctx context.Context, from, to, contract string, amount *big.Int) (*core.Transaction, error) {
+	txe, err := w.gc.TRC20SendCtx(callerCtx(ctx), from, to, contract, amount, w.cfg.DefaultFeeLimitSun)
+	if err != nil {
+		return nil, err
+	}
+	tx := txe.GetTransaction()
+	if tx == nil {
+		return nil, fmt.Errorf("empty transaction")
+	}
+	if ret := txe.GetResult(); ret != nil && ret.GetCode() != 0 {
+		return nil, fmt.Errorf("create trc20: %s", string(ret.GetMessage()))
+	}
+	return tx, nil
+}
+
+// BroadcastTransaction submits a signed transaction via gRPC.
+func (w *GRPCWriteClient) BroadcastTransaction(ctx context.Context, tx *core.Transaction) error {
+	if tx == nil {
+		return fmt.Errorf("empty transaction")
+	}
+	ret, err := w.gc.BroadcastCtx(callerCtx(ctx), tx)
+	if err != nil {
+		return err
+	}
+	if ret == nil {
+		return fmt.Errorf("broadcast: nil response")
+	}
+	if ret.GetCode() != 0 {
+		return fmt.Errorf("broadcast: %s", string(ret.GetMessage()))
+	}
+	return nil
+}
+
+// GetTransactionSignWeight queries multisig sign weight via gRPC.
+func (w *GRPCWriteClient) GetTransactionSignWeight(ctx context.Context, tx *core.Transaction) (*api.TransactionSignWeight, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("empty transaction")
+	}
+	return w.gc.GetTransactionSignWeightCtx(callerCtx(ctx), tx)
+}
+
+func (w *GRPCWriteClient) signAndBroadcast(ctx context.Context, tx *core.Transaction, priv *ecdsa.PrivateKey) (string, error) {
 	if tx == nil {
 		return "", fmt.Errorf("empty transaction")
 	}
@@ -112,9 +165,12 @@ func (w *WriteClient) signAndBroadcast(tx *core.Transaction, priv *ecdsa.Private
 		return "", err
 	}
 	txid := transactionIDHex(signed)
-	ret, err := w.gc.Broadcast(signed)
+	ret, err := w.gc.BroadcastCtx(callerCtx(ctx), signed)
 	if err != nil {
 		return "", err
+	}
+	if ret == nil {
+		return "", fmt.Errorf("broadcast: nil response")
 	}
 	if ret.GetCode() != 0 {
 		return "", fmt.Errorf("broadcast: %s", string(ret.GetMessage()))

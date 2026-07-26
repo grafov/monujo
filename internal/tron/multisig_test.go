@@ -78,7 +78,7 @@ var _ = Describe("Multisig participation", func() {
 		mock  *mockWallet
 		conn  *grpc.ClientConn
 		cfg   *config.Config
-		wc    *tron.WriteClient
+		wc    *tron.GRPCWriteClient
 	)
 
 	BeforeEach(func() {
@@ -195,6 +195,32 @@ var _ = Describe("Multisig participation", func() {
 			Expect(calls.broadcastCalls).To(HaveLen(1))
 			Expect(calls.broadcastCalls[0].GetSignature()).To(HaveLen(2),
 				"broadcast must carry all accumulated signatures")
+		})
+
+		It("wraps broadcast errors with multisig prefix", func() {
+			sigs, _, err := tron.AppendMultisigSignature(rawHex, nil, k1)
+			Expect(err).NotTo(HaveOccurred())
+			sigs, _, err = tron.AppendMultisigSignature(rawHex, sigs, k2)
+			Expect(err).NotTo(HaveOccurred())
+
+			mock.getSignWeight = func(context.Context, *core.Transaction) (*api.TransactionSignWeight, error) {
+				return &api.TransactionSignWeight{
+					Permission:    &core.Permission{Id: 2, Threshold: 2},
+					CurrentWeight: 2,
+				}, nil
+			}
+			mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
+				return &api.Return{
+					Result:  false,
+					Code:    api.Return_CONTRACT_VALIDATE_ERROR,
+					Message: []byte("invalid signature"),
+				}, nil
+			}
+
+			_, _, err = tron.BroadcastMultisig(context.Background(), wc, rawHex, sigs)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multisig: broadcast:"))
+			Expect(err.Error()).To(ContainSubstring("invalid signature"))
 		})
 
 		It("propagates node errors and never broadcasts on GetTransactionSignWeight failure", func() {

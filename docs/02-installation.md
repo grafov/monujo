@@ -6,10 +6,9 @@
 - **GNU Make** (для удобства; собирать можно и напрямую `go build`).
 - **Git** (Makefile использует `git describe` и `git rev-parse` для
   записи версии в бинарник).
-- Доступ в интернет к узлам TronGrid (`api.trongrid.io`,
-  `api.shasta.trongrid.io`) и gRPC‑эндпойнтам (`grpc.trongrid.io:50051`,
-  `grpc.shasta.trongrid.io:50051`) — иначе сетевые операции работать не
-  будут.
+- Доступ в интернет к HTTPS TronGrid (`api.trongrid.io`,
+  `api.shasta.trongrid.io`) — для чтения и записи по умолчанию.
+  gRPC‑эндпойнты нужны только при явном `--write-transport grpc`.
 
 Дополнительные инструменты (для разработки, не нужны для эксплуатации):
 

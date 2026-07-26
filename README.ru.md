@@ -45,8 +45,10 @@ make build
 | `MONUJO_IMPORT_KEY` | Hex-приватный ключ для `wallet import`, если опущен `--key-hex`. |
 | `--network` | `mainnet` (по умолчанию) или `shasta` (тестовая сеть; контракт USDT отличается). |
 | `--output` | `table` или `json`. |
-| `--http-url` / `--grpc-url` | Переопределение базового URL TronGrid HTTP и gRPC `host:port`. |
-| `--grpc-insecure` | Использование нешифрованного gRPC только для доверенных локальных/приватных нод. |
+| `--http-url` | Переопределение базового HTTPS URL TronGrid (чтение + REST-запись; нужен `https://`, иначе `--allow-insecure-http`). |
+| `--write-transport` | Advanced: `rest` (по умолчанию, HTTPS) или `grpc` (opt-in). |
+| `--grpc-url` / `--grpc-insecure` | Advanced: только с `--write-transport grpc` (у TronGrid gRPC — plaintext). |
+| `--allow-insecure-http` | Advanced: разрешить `http://` для REST (небезопасно; предупреждение в stderr). |
 | `--force` | Пропуск подтверждения несовпадения сети в поддерживаемых горячих/офлайн операциях. |
 
 ## Только для чтения (холодный адрес, ПК с интернетом)
@@ -124,7 +126,7 @@ make build
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Горячие отправки используют **gRPC поверх TLS** к полной ноде Tron (по умолчанию `grpc.trongrid.io:50051` в mainnet) и подписывают внутри процесса. Используйте `--grpc-insecure` только для доверенных локальных/приватных нод. Вам нужно достаточно **TRX** для bandwidth/energy; переводы USDT потребляют energy — пополняйте горячий адрес соответственно.
+Горячие отправки по умолчанию идут через **HTTPS REST** TronGrid (`https://api.trongrid.io` в mainnet) и подписываются внутри процесса. HTTPS REST выбран по умолчанию, потому что публичные gRPC-эндпоинты TronGrid работают без TLS (plaintext). Используйте `--write-transport grpc` только для своего узла или если явно принимаете риск MITM. Нужно достаточно **TRX** для bandwidth/energy; переводы USDT потребляют energy.
 
 ## Заметки по безопасности
 
@@ -198,6 +200,8 @@ Tron поддерживает мультисиг нативно (см. разр�
 - **`--addr`** называет субъект для команд без получателя `--to` в CLI: `hot balance`, `wallet check` и `offline sign`. **`--from` / `--to`** используются для переводов: `hot send-trx`, `hot send-usdt` и `offline build`. Разрешение неоднозначности имя vs base58 происходит автоматически (та же эвристика, что и раньше).
 - `hot balance` больше не запрашивает парольную фразу хранилища ключей. Адрес читается из открытых метаданных файла кошелька; целостность зашифрованного ключа по-прежнему проверяется при следующем подписании чего-либо.
 - Отдельная команда `hot activate` была удалена; используйте `hot send-trx` для того же эффекта.
+- **Транспорт записи по умолчанию — HTTPS REST** (`--write-transport rest`). Скрипты, которые передавали только `--grpc-url` / `--grpc-insecure`, должны также указать `--write-transport grpc` (иначе CLI завершится ошибкой). Для REST нужен `https://` в `--http-url`, либо `--allow-insecure-http`.
+- `hot send-trx` / `hot send-usdt` запрашивают подтверждение (`[y/N]`) перед парольной фразой; в скриптах используйте `--yes`.
 
 ## Лицензия
 

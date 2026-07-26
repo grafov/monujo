@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// Package tron implements Tron-specific clients (read via HTTP, write via gRPC).
+// Package tron implements Tron-specific clients (read and default write via HTTPS REST).
 package tron
 
 import (

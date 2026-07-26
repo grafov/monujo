@@ -16,10 +16,14 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/grafov/monujo/internal/app"
+	"github.com/grafov/monujo/internal/config"
 	"github.com/grafov/monujo/internal/keystore"
 	"github.com/spf13/cobra"
 )
@@ -69,6 +73,32 @@ func resolveHotSender(keystoreDir, from string) (string, error) {
 	return res.Name, nil
 }
 
+// confirmHotSend prints a short preview and asks [y/N] before passphrase.
+// With yes=true (scripts), confirmation is skipped. Non-TTY without --yes fails.
+func confirmHotSend(cfg *config.Config, kind, fromName, toAddr, amount string, yes bool) error {
+	fmt.Fprintf(os.Stderr, "\n=== hot %s ===\n", kind)
+	fmt.Fprintf(os.Stderr, "  network: %s\n", cfg.Network)
+	fmt.Fprintf(os.Stderr, "  from:    %s\n", fromName)
+	fmt.Fprintf(os.Stderr, "  to:      %s\n", toAddr)
+	fmt.Fprintf(os.Stderr, "  amount:  %s\n", amount)
+	if yes {
+		return nil
+	}
+	if !stdinIsTerminal() {
+		return fmt.Errorf("aborted: refused to act without --yes on a non-interactive stdin")
+	}
+	fmt.Fprintf(os.Stderr, "Continue? [y/N]: ")
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return err
+	}
+	line = strings.TrimSpace(strings.ToLower(line))
+	if isAffirmative(line) {
+		return nil
+	}
+	return fmt.Errorf("aborted by user")
+}
+
 func newHotBalanceCmd() *cobra.Command {
 	var addr string
 	var force bool
@@ -115,7 +145,7 @@ network, use "wallet check --addr ..." instead of a signing command.`,
 
 func newHotSendTRXCmd() *cobra.Command {
 	var from, to, amount string
-	var force bool
+	var force, yes bool
 	cmd := &cobra.Command{
 		Use:   "send-trx",
 		Short: "Send TRX from a wallet (keystore name or base58 address)",
@@ -135,6 +165,9 @@ func newHotSendTRXCmd() *cobra.Command {
 			if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
 				return err
 			}
+			if err := confirmHotSend(cfg, "send-trx", name, toAddr, amount+" TRX", yes); err != nil {
+				return err
+			}
 			pass, err := keystore.ReadPassphrase(fmt.Sprintf("Passphrase for %s: ", name))
 			if err != nil {
 				return err
@@ -151,15 +184,16 @@ func newHotSendTRXCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("to")
 	_ = cmd.MarkFlagRequired("amount")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip interactive confirmation when operation network differs from networks recorded in the wallet file")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive send confirmation prompt (for scripts)")
 	return cmd
 }
 
 func newHotSendUSDTCmd() *cobra.Command {
 	var from, to, amount string
-	var force bool
+	var force, yes bool
 	cmd := &cobra.Command{
 		Use:   "send-usdt",
-		Short: "Send USDT (TRC-20) from a wallet (keystore name or base58 address)",
+		Short: "Send USDT (TRC-20); on Shasta this is test USDT, not Tether",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
@@ -174,6 +208,9 @@ func newHotSendUSDTCmd() *cobra.Command {
 				return err
 			}
 			if err := confirmWalletNetworkForOperation(cfg, name, force); err != nil {
+				return err
+			}
+			if err := confirmHotSend(cfg, "send-usdt", name, toAddr, amount+" USDT", yes); err != nil {
 				return err
 			}
 			pass, err := keystore.ReadPassphrase(fmt.Sprintf("Passphrase for %s: ", name))
@@ -192,5 +229,6 @@ func newHotSendUSDTCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("to")
 	_ = cmd.MarkFlagRequired("amount")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip interactive confirmation when operation network differs from networks recorded in the wallet file")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive send confirmation prompt (for scripts)")
 	return cmd
 }

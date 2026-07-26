@@ -10,7 +10,7 @@
    машине.
 3. **online PC #2** — `offline broadcast` ещё раз показывает поля
    транзакции, спрашивает подтверждение и отправляет её в сеть через
-   gRPC.
+   HTTPS REST (`/wallet/broadcasthex` по умолчанию).
 
 ```mermaid
 flowchart LR

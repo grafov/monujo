@@ -17,7 +17,7 @@
 3. **Горячий кошелёк (hot)** — онлайн-операции: `hot balance` (без
    пароля; имя кошелька или произвольный адрес через `--addr`),
    `hot send-trx`, `hot send-usdt`. Подписание выполняется
-   в процессе, рассылка — через **gRPC** к полному узлу Tron.
+   в процессе, рассылка — через **HTTPS REST** TronGrid (gRPC — opt-in).
 4. **Air-gap (offline)** — три команды для классического сценария
    с физической изоляцией ключа: `offline build` готовит на онлайн-ПК
    неподписанную транзакцию, `offline sign` на офлайн-ПК добавляет
@@ -74,7 +74,8 @@ internal/domain/              # неизменяемые типы данных, 
   transfer.go                 # TRC20TransferRow
 internal/tron/                # сетевые клиенты
   read_client.go              # HTTP к TronGrid (account, trc20 history)
-  write_client.go             # gRPC к полному узлу + подписание
+  http_write_client.go        # HTTPS Wallet API (запись по умолчанию)
+  write_client.go             # opt-in gRPC (gotron-sdk) + подписание
   address.go                  # ValidateBase58Address
   constants.go                # адреса USDT‑контрактов
   offline.go                  # build/sign/broadcast helpers вне keystore
@@ -124,8 +125,8 @@ internal/transfer/            # JSON‑конверты для air-gap сцен�
    - `keystore.LoadPrivateKey()` расшифровывает keystore
      (argon2id → AES‑GCM для v2, либо scrypt → AES‑GCM для legacy v1
      с автомиграцией в v2), сверяет адрес.
-   - Строится транзакция через `tron.WriteClient` (`gotron-sdk`),
-     подписывается локально и рассылается через gRPC.
+   - Строится транзакция через HTTPS REST TronGrid (по умолчанию) или opt-in gRPC,
+     подписывается локально и рассылается тем же транспортом записи.
    - При успешной отправке вызывается
      `keystore.EnsureNetworkRecorded()`, чтобы текущая сеть появилась в
      метаданных файла, если её там не было.

@@ -149,7 +149,7 @@ func newMultisigForTest(conn *grpc.ClientConn) (svc *MultisigService, ksDir, wal
 	walletAddr = addr
 
 	svc = NewMultisigService(cfg)
-	svc.onlineWriter = func() (*tron.WriteClient, func(), error) {
+	svc.onlineWriter = func() (tron.TransactionWriter, func(), error) {
 		return trontest.NewWriteClientWithConn(cfg, conn), func() {}, nil
 	}
 	svc.confirmIn = strings.NewReader("y\n")

@@ -34,26 +34,17 @@ import (
 // so the tron_test entry point picks up these specs automatically.
 
 var _ = Describe("truncate", func() {
-	DescribeTable("returns the input untouched when shorter or equal to n",
-		func(in string, n int) {
-			Expect(truncate(in, n)).To(Equal(in))
-		},
-		Entry("empty string with n=10", "", 10),
-		Entry("equal length", "hello", 5),
-		Entry("shorter than n", "hi", 5),
-	)
-
-	It("appends an ellipsis when input is longer than n", func() {
-		out := truncate("hello world", 5)
-		Expect(out).To(Equal("hello..."))
+	It("returns the input untouched when shorter or equal to limit", func() {
+		Expect(truncate("")).To(Equal(""))
+		Expect(truncate(strings.Repeat("x", errorBodyTruncateLen))).To(Equal(strings.Repeat("x", errorBodyTruncateLen)))
 	})
 
-	It("works with multi-byte safe lengths (operates on bytes)", func() {
-		long := strings.Repeat("X", 300)
-		out := truncate(long, 200)
-		Expect(out).To(HaveLen(203))
+	It("appends an ellipsis when input is longer than limit", func() {
+		long := strings.Repeat("X", errorBodyTruncateLen+1)
+		out := truncate(long)
+		Expect(out).To(HaveLen(errorBodyTruncateLen + 3))
 		Expect(out).To(HaveSuffix("..."))
-		Expect(out[:200]).To(Equal(strings.Repeat("X", 200)))
+		Expect(out[:errorBodyTruncateLen]).To(Equal(strings.Repeat("X", errorBodyTruncateLen)))
 	})
 })
 

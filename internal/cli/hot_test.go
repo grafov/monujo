@@ -16,6 +16,8 @@
 package cli
 
 import (
+	"bytes"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -76,5 +78,37 @@ var _ = Describe("resolveHotSender", func() {
 		_, err := resolveHotSender(dir, "")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("--from must be provided"))
+	})
+})
+
+var _ = Describe("hot send confirmation", func() {
+	BeforeEach(func() {
+		networkFlag = "mainnet"
+		outputFlag = "table"
+		httpURLFlag = ""
+		grpcURLFlag = ""
+		grpcInsecureFlag = false
+		writeTransportFlag = "rest"
+		allowInsecureHTTPFlag = false
+		apiKeyFlag = ""
+		keystoreDirFlag = ""
+	})
+
+	It("rejects non-interactive hot send without --yes before passphrase", func() {
+		dir := GinkgoT().TempDir()
+		stashWallet(dir, "sender")
+		root := newRootCmd()
+		root.SetOut(&bytes.Buffer{})
+		root.SetErr(&bytes.Buffer{})
+		root.SetArgs([]string{
+			"--keystore-dir", dir,
+			"hot", "send-trx",
+			"--from", "sender",
+			"--to", "TXmVpin5vq5gdZsciyyjdZgKRUju4st1wM",
+			"--amount", "1",
+		})
+		err := root.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("without --yes"))
 	})
 })

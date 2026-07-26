@@ -19,23 +19,26 @@
 
 ## Таблица: команды с сетевым трафиком
 
-Базовые URL и хосты gRPC зависят от `--network` (`mainnet` или
-`shasta`). Их можно заменить флагами `--http-url` и `--grpc-url` на
-совместимый TronGrid или свой полный узел.
+Базовые URL зависят от `--network` (`mainnet` или `shasta`). Их можно
+заменить флагом `--http-url` на совместимый TronGrid или свой полный узел.
 
-| Команда                         | Протокол               | Домен по умолчанию (mainnet / shasta)                      | Эндпойнты или RPC                                                                                                                                             |
-|---------------------------------|------------------------|------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `watch balance`                 | HTTPS (REST, TronGrid) | `api.trongrid.io` / `api.shasta.trongrid.io`               | `GET /v1/accounts/{address}`                                                                                                                                  |
-| `watch txs`                     | HTTPS (REST, TronGrid) | то же                                                      | `GET /v1/accounts/{address}/transactions/trc20` с query-параметрами `only_confirmed=true`, `limit`, `contract_address` (канонический USDT для выбранной сети) |
-| `hot balance`                   | HTTPS (REST, TronGrid) | то же                                                      | Те же запросы, что у `watch balance` (чтение баланса через HTTP API)                                                                                          |
-| `hot send-trx`                  | gRPC over TLS          | `grpc.trongrid.io:50051` / `grpc.shasta.trongrid.io:50051` | Сборка: `Wallet.CreateTransaction2`; отправка: `Wallet.BroadcastTransaction`                                                                                  |
-| `hot send-usdt`                 | gRPC over TLS          | то же                                                      | Сборка TRC-20: `Wallet.TriggerContract`; отправка: `Wallet.BroadcastTransaction`                                                                              |
-| `offline build` (`--kind=trx`)  | gRPC over TLS          | то же                                                      | `Wallet.CreateTransaction2` (только неподписанная транзакция, без broadcast)                                                                                  |
-| `offline build` (`--kind=usdt`) | gRPC over TLS          | то же                                                      | `Wallet.TriggerContract` (только сборка, без broadcast)                                                                                                       |
-| `offline broadcast`             | gRPC over TLS          | то же                                                      | `Wallet.BroadcastTransaction`                                                                                                                                 |
+По умолчанию **запись** (сборка и broadcast транзакций) идёт через
+**HTTPS REST** (`--write-transport rest`). Опционально: `--write-transport grpc`
+и `--grpc-url` (см. раздел gRPC ниже).
 
-Имена RPC приведены в терминах **Tron Wallet gRPC API**, к которому
-подключается зависимость `gotron-sdk` (`internal/tron/write_client.go`).
+| Команда                         | Протокол (по умолчанию) | Домен (mainnet / shasta)     | Эндпойнты                                                                 |
+|---------------------------------|-------------------------|------------------------------|---------------------------------------------------------------------------|
+| `watch balance`                 | HTTPS (REST, TronGrid)  | `api.trongrid.io` / `api.shasta.trongrid.io` | `GET /v1/accounts/{address}`                                              |
+| `watch txs`                     | HTTPS (REST, TronGrid)  | то же                        | `GET /v1/accounts/{address}/transactions/trc20`                           |
+| `watch permissions`             | HTTPS (REST, TronGrid)  | то же                        | `GET /v1/accounts/{address}` (поля owner/witness/active permission)       |
+| `hot balance`                   | HTTPS (REST, TronGrid)  | то же                        | те же запросы, что у `watch balance`                                      |
+| `hot send-trx`                  | HTTPS (REST)            | то же                        | `POST /wallet/createtransaction`, `POST /wallet/broadcasthex`             |
+| `hot send-usdt`                 | HTTPS (REST)            | то же                        | `POST /wallet/triggersmartcontract`, `POST /wallet/broadcasthex`          |
+| `offline build` (`--kind=trx`)  | HTTPS (REST)            | то же                        | `POST /wallet/createtransaction` (без broadcast)                            |
+| `offline build` (`--kind=usdt`) | HTTPS (REST)            | то же                        | `POST /wallet/triggersmartcontract` (без broadcast)                         |
+| `offline broadcast`             | HTTPS (REST)            | то же                        | `POST /wallet/broadcasthex`                                               |
+| `multisig info`                 | HTTPS (REST)            | то же                        | `POST /wallet/getsignweight`                                              |
+| `multisig broadcast`            | HTTPS (REST)            | то же                        | `POST /wallet/getsignweight`, `POST /wallet/broadcasthex`                 |
 
 ### Полные URL для HTTPS
 
@@ -50,33 +53,47 @@
 ### API-ключ TronGrid
 
 Если задан `--api-key` или переменная окружения `MONUJO_TRONGRID_API_KEY`,
-к **HTTPS**-запросам добавляется заголовок `TRON-PRO-API-KEY`. Для
-**gRPC** ключ передаётся через клиент SDK тем же конфигом (см. код
-`NewWriteClientFromConfig`).
+к **HTTPS**-запросам добавляется заголовок `TRON-PRO-API-KEY`.
+
+## Опциональный транспорт gRPC (`--write-transport grpc`)
+
+Для совместимости с `java-tron` gRPC или отладки можно явно выбрать gRPC
+через gotron-sdk:
+
+| Команда (те же, что выше) | Протокол (opt-in) | Хост по умолчанию                          | RPC (Wallet API)                    |
+|---------------------------|-------------------|--------------------------------------------|-------------------------------------|
+| `hot send-*`, `offline build/broadcast`, `multisig info/broadcast` | gRPC (часто **plaintext**) | `grpc.trongrid.io:50051` / `grpc.shasta.trongrid.io:50051` | `CreateTransaction2`, `TriggerContract`, `BroadcastTransaction`, `GetTransactionSignWeight` |
+
+Флаги:
+
+- `--write-transport grpc` — включить gRPC вместо REST.
+- `--grpc-url` — `host:port` полного узла.
+- `--grpc-insecure` — plaintext gRPC (нужен для публичного TronGrid и большинства локальных full node).
+
+При `--write-transport grpc --grpc-insecure` на известных хостах TronGrid
+CLI выводит **предупреждение в stderr**: публичный TronGrid gRPC не
+использует TLS; предпочтительнее дефолтный `--write-transport rest`.
 
 ## Переопределение узлов
 
-- `--http-url` — полная база для REST (например `https://api.trongrid.io`);
-  используется только чтение (`ReadClient`).
-- `--grpc-url` — адрес вида `host:port` для операций записи и сборки
-  транзакций (`WriteClient`).
-- `--grpc-insecure` — отключает TLS для gRPC. Используйте только для
-  доверенного локального узла, приватной сети или TLS-терминации снаружи
-  процесса.
+- `--http-url` — база для REST (чтение и запись при `rest`).
+- `--grpc-url` — только при `--write-transport grpc`.
 
 Оба параметра могут указывать на **другой домен**, если узел реализует
-тот же HTTP- и Wallet gRPC-интерфейс, что ожидает monujo.
+тот же HTTP- и (при необходимости) Wallet gRPC-интерфейс.
 
 ## Риски и жёсткая конфигурация
 
-1. **TLS по умолчанию.** Запросы к TronGrid REST идут по **HTTPS**, а
-   gRPC-клиент использует TLS по умолчанию. Plaintext gRPC доступен только
-   через `--grpc-insecure` для доверенных локальных или приватных узлов.
+1. **HTTPS REST по умолчанию.** Чтение и запись через TronGrid идут по
+   **HTTPS** на `api.*.trongrid.io`. gRPC — только явный opt-in.
+   `http://` для REST запрещён без `--allow-insecure-http`.
 
-2. **Доверие к узлу.** Узел видит адреса отправителя, суммы и при
-   broadcast — подписанные транзакции. Выбирайте поставщика endpoint’ов
-   осознанно.
+2. **Plaintext gRPC.** TronGrid и типичный `java-tron` на `:50051` принимают
+   gRPC **без TLS**. Не включайте `--write-transport grpc` в недоверенной
+   сети без понимания риска MITM. Флаги `--grpc-url` / `--grpc-insecure`
+   без `--write-transport grpc` — ошибка (не молчаливый fallback на REST).
 
-3. **Нет посторонней телеметрии.** В составе monujo нет отдельных
-   запросов к аналитике, CDN или сторонним API: исходящий трафик сводится
-   к настроенным HTTP- и gRPC-эндпойнтам Tron (см. таблицу выше).
+3. **Доверие к узлу.** Узел видит адреса, суммы и подписанные транзакции.
+
+4. **Нет посторонней телеметрии.** Исходящий трафик сводится к настроенным
+   HTTP/gRPC эндпойнтам (см. таблицы выше).

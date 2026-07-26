@@ -60,7 +60,7 @@ var _ = Describe("Offline", func() {
 		mock  *mockWallet
 		conn  *grpc.ClientConn
 		cfg   *config.Config
-		wc    *tron.WriteClient
+		wc    *tron.GRPCWriteClient
 	)
 
 	BeforeEach(func() {
@@ -105,7 +105,7 @@ var _ = Describe("Offline", func() {
 		})
 
 		It("returns a payload with a hex-encoded raw_data, txid, and human fields", func() {
-			pl, err := tron.BuildUnsignedTRX(context.Background(), wc, testFromAddr, testToAddr, 1_500_000, "lunch")
+			pl, err := tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, testFromAddr, testToAddr, 1_500_000, "lunch")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pl.Kind).To(Equal(transfer.KindTRX))
 			Expect(pl.From).To(Equal(testFromAddr))
@@ -119,15 +119,15 @@ var _ = Describe("Offline", func() {
 		})
 
 		It("rejects invalid base58 from-address before any RPC", func() {
-			_, err := tron.BuildUnsignedTRX(context.Background(), wc, "not-base58", testToAddr, 1, "")
+			_, err := tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, "not-base58", testToAddr, 1, "")
 			Expect(err).To(HaveOccurred())
 			Expect(calls.createTxCalls).To(BeEmpty())
 		})
 
 		It("rejects non-positive amount", func() {
-			_, err := tron.BuildUnsignedTRX(context.Background(), wc, testFromAddr, testToAddr, 0, "")
+			_, err := tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, testFromAddr, testToAddr, 0, "")
 			Expect(err).To(HaveOccurred())
-			_, err = tron.BuildUnsignedTRX(context.Background(), wc, testFromAddr, testToAddr, -1, "")
+			_, err = tron.BuildUnsignedTRX(context.Background(), wc, config.NetworkMainnet, testFromAddr, testToAddr, -1, "")
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -155,14 +155,18 @@ var _ = Describe("Offline", func() {
 			}
 		})
 
-		It("populates Contract and FeeLimitSun from cfg", func() {
-			pl, err := tron.BuildUnsignedUSDT(context.Background(), wc, testFromAddr, testToAddr, mustParseBigInt("12345000"), "")
+		It("populates Contract and FeeLimitSun from raw_data", func() {
+			pl, err := tron.BuildUnsignedUSDT(context.Background(), wc, config.NetworkMainnet, 100_000_000, testFromAddr, testToAddr, mustParseBigInt("12345000"), "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pl.Kind).To(Equal(transfer.KindTRC20USDT))
 			Expect(pl.Contract).To(Equal(tron.MainnetUSDTContract))
-			Expect(pl.FeeLimitSun).To(Equal(int64(100_000_000)))
 			Expect(pl.AmountMinimal).To(Equal("12345000"))
 			Expect(pl.Amount).To(ContainSubstring("USDT"))
+
+			summary, err := tron.DecodeRawDataSummary(pl.RawDataHex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pl.FeeLimitSun).To(Equal(summary.FeeLimitSun))
+			Expect(pl.FeeLimitSun).To(BeNumerically(">", 0))
 		})
 	})
 

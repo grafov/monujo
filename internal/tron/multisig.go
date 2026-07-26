@@ -191,18 +191,15 @@ var ErrAlreadySigned = errors.New("multisig: this key already signed the transac
 // weight.
 //
 // No broadcast is performed; this is safe to use from "multisig info".
-func GetMultisigSignWeight(ctx context.Context, w *WriteClient, rawDataHex string, sigsHex []string) (*api.TransactionSignWeight, error) {
-	if w == nil {
+func GetMultisigSignWeight(ctx context.Context, w TransactionWriter, rawDataHex string, sigsHex []string) (*api.TransactionSignWeight, error) {
+	if transactionWriterIsNil(w) {
 		return nil, errors.New("multisig: nil write client")
 	}
 	tx, err := assembleTransaction(rawDataHex, sigsHex)
 	if err != nil {
 		return nil, err
 	}
-	if err := w.bindContext(ctx); err != nil {
-		return nil, err
-	}
-	return w.gc.GetTransactionSignWeight(tx)
+	return w.GetTransactionSignWeight(ctx, tx)
 }
 
 // BroadcastMultisig queries the node for the current sign weight, refuses
@@ -210,18 +207,15 @@ func GetMultisigSignWeight(ctx context.Context, w *WriteClient, rawDataHex strin
 // threshold, and then broadcasts the fully signed transaction. The returned
 // weight is always populated (even on pre-check failure) so callers can
 // render a helpful diagnostic.
-func BroadcastMultisig(ctx context.Context, w *WriteClient, rawDataHex string, sigsHex []string) (string, *api.TransactionSignWeight, error) {
-	if w == nil {
+func BroadcastMultisig(ctx context.Context, w TransactionWriter, rawDataHex string, sigsHex []string) (string, *api.TransactionSignWeight, error) {
+	if transactionWriterIsNil(w) {
 		return "", nil, errors.New("multisig: nil write client")
 	}
 	tx, err := assembleTransaction(rawDataHex, sigsHex)
 	if err != nil {
 		return "", nil, err
 	}
-	if err := w.bindContext(ctx); err != nil {
-		return "", nil, err
-	}
-	weight, err := w.gc.GetTransactionSignWeight(tx)
+	weight, err := w.GetTransactionSignWeight(ctx, tx)
 	if err != nil {
 		return "", nil, fmt.Errorf("multisig: get sign weight: %w", err)
 	}
@@ -235,12 +229,8 @@ func BroadcastMultisig(ctx context.Context, w *WriteClient, rawDataHex string, s
 		return "", weight, fmt.Errorf("multisig: current weight %d < threshold %d (permission id=%d); broadcast refused",
 			current, threshold, perm.GetId())
 	}
-	ret, err := w.gc.Broadcast(tx)
-	if err != nil {
-		return "", weight, err
-	}
-	if ret.GetCode() != 0 {
-		return "", weight, fmt.Errorf("multisig: broadcast: %s", string(ret.GetMessage()))
+	if err := w.BroadcastTransaction(ctx, tx); err != nil {
+		return "", weight, fmt.Errorf("multisig: broadcast: %w", err)
 	}
 	txid, err := txIDFromRawData(tx.GetRawData())
 	if err != nil {

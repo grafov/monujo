@@ -201,13 +201,13 @@ func mustParseBigInt(s string) *big.Int {
 	return v
 }
 
-var _ = Describe("WriteClient", func() {
+var _ = Describe("GRPCWriteClient", func() {
 	var (
 		calls *recordedCalls
 		mock  *mockWallet
 		conn  *grpc.ClientConn
 		cfg   *config.Config
-		wc    *tron.WriteClient
+		wc    *tron.GRPCWriteClient
 		priv  *ecdsa.PrivateKey
 	)
 
@@ -445,6 +445,174 @@ var _ = Describe("WriteClient", func() {
 				Expect(err.Error()).To(ContainSubstring("token contract not found"))
 				Expect(calls.broadcastCalls).To(BeEmpty())
 			})
+		})
+	})
+
+	Describe("CreateTRXTransfer", func() {
+		Context("when the upstream accepts the transfer", func() {
+			BeforeEach(func() {
+				mock.createTx2 = func(_ context.Context, _ *core.TransferContract) (*api.TransactionExtention, error) {
+					return okExtention(&core.TransactionRaw{
+						RefBlockBytes: []byte{0x01, 0x02},
+						Data:          []byte("create-trx"),
+					}), nil
+				}
+			})
+
+			It("returns an unsigned transaction", func() {
+				tx, err := wc.CreateTRXTransfer(context.Background(), testFromAddr, testToAddr, 2_000_000)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tx.GetRawData()).NotTo(BeNil())
+				Expect(calls.createTxCalls).To(HaveLen(1))
+				Expect(calls.createTxCalls[0].GetAmount()).To(Equal(int64(2_000_000)))
+			})
+		})
+
+		Context("when CreateTransaction2 returns an empty transaction", func() {
+			BeforeEach(func() {
+				mock.createTx2 = func(context.Context, *core.TransferContract) (*api.TransactionExtention, error) {
+					return &api.TransactionExtention{
+						Result: &api.Return{Result: true, Code: api.Return_SUCCESS},
+					}, nil
+				}
+			})
+
+			It("returns an empty transaction error", func() {
+				_, err := wc.CreateTRXTransfer(context.Background(), testFromAddr, testToAddr, 1)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("empty transaction"))
+			})
+		})
+
+		Context("when CreateTransaction2 reports a non-zero result code", func() {
+			BeforeEach(func() {
+				mock.createTx2 = func(context.Context, *core.TransferContract) (*api.TransactionExtention, error) {
+					return &api.TransactionExtention{
+						Transaction: &core.Transaction{RawData: &core.TransactionRaw{}},
+						Result: &api.Return{
+							Result:  false,
+							Code:    api.Return_CONTRACT_VALIDATE_ERROR,
+							Message: []byte("bad owner"),
+						},
+					}, nil
+				}
+			})
+
+			It("returns the contract validation error", func() {
+				_, err := wc.CreateTRXTransfer(context.Background(), testFromAddr, testToAddr, 1)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("bad owner"))
+			})
+		})
+	})
+
+	Describe("CreateTRC20Transfer", func() {
+		Context("when the upstream accepts the transfer", func() {
+			BeforeEach(func() {
+				mock.trigger = func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+					return okExtention(&core.TransactionRaw{
+						RefBlockBytes: []byte{0x03, 0x04},
+						Data:          []byte("create-trc20"),
+					}), nil
+				}
+			})
+
+			It("targets the configured USDT contract and packs transfer data", func() {
+				tx, err := wc.CreateTRC20Transfer(context.Background(), testFromAddr, testToAddr, tron.MainnetUSDTContract, mustParseBigInt("65535"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tx.GetRawData()).NotTo(BeNil())
+				Expect(calls.triggerCalls).To(HaveLen(1))
+				Expect(tronAddrBytesToBase58(calls.triggerCalls[0].GetContractAddress())).To(Equal(tron.MainnetUSDTContract))
+				data := calls.triggerCalls[0].GetData()
+				Expect(hex.EncodeToString(data[:4])).To(Equal(trc20TransferSelector))
+				Expect(hex.EncodeToString(data[len(data)-32:])).To(Equal(
+					"000000000000000000000000000000000000000000000000000000000000ffff"))
+			})
+		})
+
+		Context("when TriggerContract reports a non-zero result code", func() {
+			BeforeEach(func() {
+				mock.trigger = func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+					return &api.TransactionExtention{
+						Transaction: &core.Transaction{RawData: &core.TransactionRaw{}},
+						Result: &api.Return{
+							Result:  false,
+							Code:    api.Return_CONTRACT_VALIDATE_ERROR,
+							Message: []byte("token contract not found"),
+						},
+					}, nil
+				}
+			})
+
+			It("returns the contract validation error", func() {
+				_, err := wc.CreateTRC20Transfer(context.Background(), testFromAddr, testToAddr, tron.MainnetUSDTContract, mustParseBigInt("1"))
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("token contract not found"))
+			})
+		})
+	})
+
+	Describe("BroadcastTransaction", func() {
+		It("rejects a nil transaction", func() {
+			err := wc.BroadcastTransaction(context.Background(), nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("empty transaction"))
+		})
+
+		Context("when broadcast reports failure", func() {
+			BeforeEach(func() {
+				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
+					return &api.Return{
+						Result:  false,
+						Code:    api.Return_CONTRACT_VALIDATE_ERROR,
+						Message: []byte("invalid signature"),
+					}, nil
+				}
+			})
+
+			It("surfaces the broadcast error", func() {
+				tx := &core.Transaction{RawData: &core.TransactionRaw{Data: []byte("x")}}
+				err := wc.BroadcastTransaction(context.Background(), tx)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid signature"))
+			})
+		})
+
+		Context("when broadcast returns a nil response", func() {
+			BeforeEach(func() {
+				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
+					return nil, nil
+				}
+			})
+
+			It("returns an error without panicking", func() {
+				tx := &core.Transaction{RawData: &core.TransactionRaw{Data: []byte("x")}}
+				err := wc.BroadcastTransaction(context.Background(), tx)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("result error"))
+			})
+		})
+	})
+
+	Describe("GetTransactionSignWeight", func() {
+		It("rejects a nil transaction", func() {
+			_, err := wc.GetTransactionSignWeight(context.Background(), nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("empty transaction"))
+		})
+
+		It("returns the node's sign-weight response", func() {
+			mock.getSignWeight = func(context.Context, *core.Transaction) (*api.TransactionSignWeight, error) {
+				return &api.TransactionSignWeight{
+					Permission:    &core.Permission{Id: 2, Threshold: 2},
+					CurrentWeight: 1,
+				}, nil
+			}
+			tx := &core.Transaction{RawData: &core.TransactionRaw{Data: []byte("weight")}}
+			weight, err := wc.GetTransactionSignWeight(context.Background(), tx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(weight.GetCurrentWeight()).To(Equal(int64(1)))
+			Expect(calls.signWeightCalls).To(HaveLen(1))
 		})
 	})
 

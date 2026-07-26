@@ -44,8 +44,10 @@ Requires Go 1.24+ (see `go.mod`).
 | `MONUJO_IMPORT_KEY`                      | Hex private key for `wallet import` if `--key-hex` is omitted.          |
 | `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).       |
 | `--output`                               | `table` or `json`.                                                      |
-| `--http-url` / `--grpc-url`              | Override TronGrid HTTP base URL and gRPC `host:port`.                   |
-| `--grpc-insecure`                        | Use plaintext gRPC only for trusted local/private nodes.                |
+| `--http-url`                             | Override TronGrid HTTP base URL (read + default write transport; must be `https://` unless `--allow-insecure-http`). |
+| `--write-transport`                      | Advanced: `rest` (default, HTTPS) or `grpc` (opt-in).                                 |
+| `--grpc-url` / `--grpc-insecure`         | Advanced: only with `--write-transport grpc` (TronGrid gRPC is plaintext).            |
+| `--allow-insecure-http`                  | Advanced: allow `http://` for REST (insecure; warns on stderr).                       |
 | `--force`                                | Skip network-mismatch confirmation on supported hot/offline operations. |
 
 ## Watch-only (cold address, online PC)
@@ -123,7 +125,7 @@ If you run **`hot balance`**, **`hot send-trx`**, or **`hot send-usdt`** with a 
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Hot sends use **gRPC over TLS** to a Tron full node (default `grpc.trongrid.io:50051` on mainnet) and sign in-process. Use `--grpc-insecure` only for trusted local/private nodes. You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
+Hot sends use **HTTPS REST** to TronGrid by default (`https://api.trongrid.io` on mainnet: `/wallet/createtransaction`, `/wallet/triggersmartcontract`, `/wallet/broadcasthex`) and sign in-process. HTTPS REST is the default because public TronGrid gRPC endpoints are plaintext (no TLS). Use `--write-transport grpc` only for your own node or when you explicitly accept the MITM risk. You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
 
 ## Security notes
 
@@ -197,6 +199,8 @@ The CLI surface is still being shaped; while the major version is `0.x` we do ha
 - **`--addr`** names the subject for commands without a `--to` recipient on the CLI: `hot balance`, `wallet check`, and `offline sign`. **`--from` / `--to`** are used for transfers: `hot send-trx`, `hot send-usdt`, and `offline build`. Name vs base58 disambiguation is automatic (same heuristic as before).
 - `hot balance` no longer prompts for the keystore passphrase. The address is read from the plaintext metadata of the wallet file; integrity of the encrypted key is still verified the next time you sign anything.
 - The separate `hot activate` command was removed; use `hot send-trx` for the same effect.
+- **Default write transport is HTTPS REST** (`--write-transport rest`). Scripts that only passed `--grpc-url` / `--grpc-insecure` must now also pass `--write-transport grpc` (otherwise the CLI errors). REST requires an `https://` `--http-url` unless you pass `--allow-insecure-http`.
+- `hot send-trx` / `hot send-usdt` ask for interactive confirmation (`[y/N]`) before the passphrase; use `--yes` in scripts.
 
 ## License
 

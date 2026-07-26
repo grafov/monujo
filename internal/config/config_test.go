@@ -46,7 +46,34 @@ var _ = Describe("config", func() {
 		Expect(cfg.GRPCAddress).To(Equal("node.test:50051"))
 		Expect(cfg.TronGridAPIKey).To(Equal("api-key"))
 		Expect(cfg.KeystoreDir).To(Equal("/tmp/ks"))
+		Expect(cfg.WriteTransport).To(Equal(WriteTransportREST))
 		Expect(cfg.DefaultFeeLimitSun).To(BeNumerically(">", 0))
+	})
+
+	It("parses write transport", func() {
+		wt, err := ParseWriteTransport("grpc")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(wt).To(Equal(WriteTransportGRPC))
+
+		wt, err = ParseWriteTransport("")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(wt).To(Equal(WriteTransportREST))
+
+		_, err = ParseWriteTransport("quic")
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("validates REST HTTP base URL scheme", func() {
+		Expect(IsHTTPSBaseURL("https://api.trongrid.io")).To(BeTrue())
+		Expect(IsHTTPSBaseURL("http://127.0.0.1:8090")).To(BeFalse())
+		Expect(ValidateRESTHTTPBaseURL("https://api.trongrid.io", false)).To(Succeed())
+		Expect(ValidateRESTHTTPBaseURL("http://127.0.0.1:8090", false)).NotTo(Succeed())
+		Expect(ValidateRESTHTTPBaseURL("http://127.0.0.1:8090", true)).To(Succeed())
+	})
+
+	It("detects TronGrid gRPC hosts", func() {
+		Expect(IsTronGridGRPC(defaultGRPCMainnet)).To(BeTrue())
+		Expect(IsTronGridGRPC("node.example:50051")).To(BeFalse())
 	})
 
 	It("uses MONUJO_KEYSTORE_DIR when set", func() {

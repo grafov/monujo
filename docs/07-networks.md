@@ -96,28 +96,31 @@ monujo --http-url https://my-tron-node.example.com \
        watch balance --addr T...
 ```
 
-Узел должен поддерживать минимум:
+Узел должен поддерживать минимум для **чтения** (TronGrid v1 API):
 
 - `GET /v1/accounts/{addr}` — для `watch balance` / `hot balance`;
 - `GET /v1/accounts/{addr}/transactions/trc20` — для `watch txs`.
 
+Для **записи** по умолчанию (`--write-transport rest`) на том же
+`--http-url` нужны Wallet HTTP методы: `/wallet/createtransaction`,
+`/wallet/triggersmartcontract`, `/wallet/broadcasthex`,
+`/wallet/getsignweight`.
+
 API‑ключ передаётся в заголовке `TRON-PRO-API-KEY`. Если ваш узел
 не использует ключи, `--api-key` можно опустить.
 
-### Свой gRPC узел
+### Свой gRPC узел (opt-in)
 
 ```bash
-monujo --grpc-url my-tron-grpc.example.com:50051 \
+monujo --write-transport grpc --grpc-url my-tron-grpc.example.com:50051 \
+       --grpc-insecure \
        hot send-trx --from myhot --to T... --amount 1
 ```
 
-Подключение **без TLS** (через `insecure.NewCredentials()` в
-`tron/write_client.go`). Если ваш узел требует mTLS, нужно патчить
-код (`NewWriteClientFromConfig`) — флага для этого пока нет.
+Обычно нужен `--grpc-insecure` (plaintext gRPC). mTLS пока не
+поддерживается флагами.
 
-API‑ключ при наличии устанавливается через `gc.SetAPIKey(...)` —
-поведение зависит от реализации `gotron-sdk` (передача в
-метаданных gRPC).
+API‑ключ при наличии передаётся в метаданных gRPC через gotron-sdk.
 
 ### API‑ключ TronGrid
 
