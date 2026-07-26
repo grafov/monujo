@@ -65,8 +65,8 @@ Dictionaries:
   russian         Russian Cyrillic including ё and й (UTF-8).
 
 WARNING: the passphrase is shown ONCE. If you lose it, the wallet is
-unrecoverable by design — see docs/06-keystore.md
-§"Восстановление доступа при утере пароля".`,
+unrecoverable by design — see doc/06-keystore.md
+§"Recovering access if the password is lost".`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGenpass(cmd.ErrOrStderr(), genpassArgs{
 				words:       words,

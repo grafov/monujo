@@ -8,6 +8,8 @@ Monujo is a minimal **Go CLI** tool for **Tron blockchain** and **USDT (TRC-20)*
 
 Firstly I made this utility for personal use. But may be it could be useful as example of TRON wallets handling with Go language. So finally I decided to make it public.
 
+Full user guide: [doc/README.md](doc/README.md).
+
 ## Features
 
 - **Watch-only mode**: Query balances and transaction history for any Tron address without requiring private keys
@@ -80,7 +82,7 @@ List wallets (name, type `local`/`external`, address, recorded networks):
 # optional: --generate-passphrase (see "Passphrase generator" below)
 ```
 
-A built-in passphrase generator is available as the standalone `monujo tool genpass` command and as `--generate-passphrase` on `wallet create` / `wallet import`. Dictionaries: `english` (EFF Long, default), `english-short`, `esperanto-x` (ASCII), `esperanto` (with diacritics), `russian` (Cyrillic). See [docs/06-keystore.md](docs/06-keystore.md) §"Генератор парольных фраз" for details, including the warnings printed for non-ASCII dictionaries and the exact NFKC semantics.
+A built-in passphrase generator is available as the standalone `monujo tool genpass` command and as `--generate-passphrase` on `wallet create` / `wallet import`. Dictionaries: `english` (EFF Long, default), `english-short`, `esperanto-x` (ASCII), `esperanto` (with diacritics), `russian` (Cyrillic). See [doc/06-keystore.md](doc/06-keystore.md) §"Passphrase generator" for details, including the warnings printed for non-ASCII dictionaries and the exact NFKC semantics.
 
 1. **Import** a 64-hex-character secp256k1 private key into an encrypted file (Argon2id + AES-256-GCM; legacy scrypt files from pre-v2 releases are auto-migrated on first unlock):
 
@@ -168,7 +170,7 @@ Two layers protect the file in transit:
 - **Visual confirmation.** Before signing and before broadcasting, monujo recomputes all human-readable fields (`from`, `to`, `amount`, `amount_minimal`, `contract`, `expiration`, `tx_id`) from the embedded `raw_data` and prints them along with the file SHA-256, then asks `[y/N]` (use `--yes` for scripts).
 - **Optional HMAC-SHA256.** Pass `--hmac-passphrase` (or `--hmac-passphrase-env`) on both ends; the key is derived via scrypt and the envelope is rejected on mismatch.
 
-See [docs/10-offline-commands.md](docs/10-offline-commands.md) for a step-by-step walk-through and the on-disk envelope format.
+See [doc/10-offline-commands.md](doc/10-offline-commands.md) for a step-by-step walk-through and the on-disk envelope format.
 
 ## Multisig
 
@@ -191,7 +193,7 @@ Tron supports multisig natively (see `owner`/`witness`/`active` permissions with
 
 Both canonical Tron JSON (the format produced by `tronWeb.trx.multiSign` and the HTTP API) and the `monujo` sealed envelope (for air-gapped transit between cosigners) are accepted. Use `monujo watch permissions --addr T...` to print the permission structure of the account, with local keystore wallets highlighted so you can tell which signatures you can contribute yourself.
 
-See [docs/13-multisig.md](docs/13-multisig.md) for the full flow, format details and non-goals.
+See [doc/13-multisig.md](doc/13-multisig.md) for the full flow, format details and non-goals.
 
 ## Breaking changes (v0.x)
 

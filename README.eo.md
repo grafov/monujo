@@ -9,6 +9,8 @@ Monujo estas minimuma **Go CLI** ilo por operacioj en la blokĉeno **Tron** kaj 
 Unufoje mi kreis la kodon por mia mem bezonoj. Sed poste mi decidis publiki la
 kodon kiel Go-lingva ekzеmplo de ellaboro kun TRON monujoj.
 
+Plena uzantgvidilo: [doc/eo/README.md](doc/eo/README.md).
+
 ## Trajtoj
 
 - **Nur-lega reĝimo**: Kontrolu saldojn kaj transakcian historion por iu ajn Tron-adreso sen bezoni privatajn ŝlosilojn
@@ -82,7 +84,7 @@ Listigi monujojn (nomo, tipo `local`/`external`, adreso, registritaj retoj):
 # nedeviga: --generate-passphrase (vidu "Generilo de pasfrazoj" sube)
 ```
 
-Enkonstruita generilo de pasfrazoj disponeblas kiel memstara komando `monujo tool genpass` kaj kiel `--generate-passphrase` ĉe `wallet create` / `wallet import`. Vortaroj: `english` (EFF Long, defaŭlta), `english-short`, `esperanto-x` (ASCII), `esperanto` (kun diakritaj signoj), `russian` (cirila). Vidu [docs/06-keystore.md](docs/06-keystore.md) §"Генератор парольных фраз" por detaloj, inkluzive de la avertoj printitaj por ne-ASCII-vortaroj kaj la preciza NFKC-semantiko.
+Enkonstruita generilo de pasfrazoj disponeblas kiel memstara komando `monujo tool genpass` kaj kiel `--generate-passphrase` ĉe `wallet create` / `wallet import`. Vortaroj: `english` (EFF Long, defaŭlta), `english-short`, `esperanto-x` (ASCII), `esperanto` (kun diakritaj signoj), `russian` (cirila). Vidu [doc/eo/06-keystore.md](doc/eo/06-keystore.md) §"Generilo de pasfrazoj" por detaloj, inkluzive de la avertoj printitaj por ne-ASCII-vortaroj kaj la preciza NFKC-semantiko.
 
 1. **Importi** 64-deksesum-karakteran secp256k1-privatan ŝlosilon en ĉifritan dosieron (Argon2id + AES-256-GCM; malnovaj scrypt-dosieroj de antaŭ-v2-versioj estas aŭtomate migritaj ĉe la unua malŝloso):
 
@@ -170,7 +172,7 @@ Du tavoloj protektas la dosieron dum transito:
 - **Vida konfirmo.** Antaŭ subskribado kaj antaŭ elsendo, monujo rekalkulas ĉiujn home legeblajn kampojn (`from`, `to`, `amount`, `amount_minimal`, `contract`, `expiration`, `tx_id`) el la enigita `raw_data` kaj printas ilin kune kun la dosiera SHA-256, tiam demandas `[y/N]` (uzu `--yes` por skriptoj).
 - **Nedeviga HMAC-SHA256.** Pasu `--hmac-passphrase` (aŭ `--hmac-passphrase-env`) ĉe ambaŭ finoj; la ŝlosilo estas derivita per scrypt kaj la koverto estas malakceptita ĉe malkongruo.
 
-Vidu [docs/10-offline-commands.md](docs/10-offline-commands.md) por paŝ-post-paŝa gvidilo kaj la sur-diska koverta formato.
+Vidu [doc/eo/10-offline-commands.md](doc/eo/10-offline-commands.md) por paŝ-post-paŝa gvidilo kaj la sur-diska koverta formato.
 
 ## Plursubskribo
 
@@ -193,7 +195,7 @@ Tron subtenas plursubskribon denaske (vidu `owner`/`witness`/`active` permesojn 
 
 Kaj kanonika Tron JSON (la formato produktita de `tronWeb.trx.multiSign` kaj la HTTP API) kaj la `monujo` sigelita koverto (por aer-interspaca transito inter kunsubskribantoj) estas akceptitaj. Uzu `monujo watch permissions --addr T...` por printi la permesan strukturon de la konto, kun lokaj ŝlosilujaj monujoj emfazitaj por ke vi povu scii kiujn subskribojn vi mem povas kontribui.
 
-Vidu [docs/13-multisig.md](docs/13-multisig.md) por la plena fluo, formataj detaloj kaj ne-celoj.
+Vidu [doc/eo/13-multisig.md](doc/eo/13-multisig.md) por la plena fluo, formataj detaloj kaj ne-celoj.
 
 ## Rompantaj ŝanĝoj (v0.x)
 

@@ -29,7 +29,7 @@
 //     secret because strings are immutable and cannot be zeroed.
 //   - Word lists are embedded at build time and validated on first use.
 //
-// See docs/06-keystore.md §"Генератор парольных фраз" for threat-model
+// See doc/06-keystore.md §"Passphrase generator" for threat-model
 // discussion and recommendations on dictionary selection.
 package passphrase
 

@@ -24,7 +24,7 @@
 // Parameter choices for v2 follow the OWASP Password Storage Cheat Sheet
 // "server" profile; salt length satisfies NIST SP 800-132 §5.1. monujo is not
 // a FIPS 140-3 / ISO/IEC 19790 certified cryptographic module: Argon2id is
-// not on the FIPS-approved list. See docs/06-keystore.md for details.
+// not on the FIPS-approved list. See doc/06-keystore.md for details.
 package keystore
 
 import (
