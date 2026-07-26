@@ -24,5 +24,5 @@ import (
 
 func TestCLI(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "internal/cli suite")
+	RunSpecs(t, "internal/cli suite\n")
 }

@@ -24,5 +24,5 @@ import (
 
 func TestApp(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "internal/app suite")
+	RunSpecs(t, "internal/app suite\n")
 }

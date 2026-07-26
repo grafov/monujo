@@ -45,7 +45,7 @@ Requires Go 1.24+ (see `go.mod`).
 | `--network`                              | `mainnet` (default) or `shasta` (testnet; USDT contract differs).       |
 | `--output`                               | `table` or `json`.                                                      |
 | `--http-url`                             | Override TronGrid HTTP base URL (read + default write transport).       |
-| `--write-transport`                      | `rest` (default, HTTPS Wallet API) or `grpc` (opt-in, gotron-sdk).      |
+| `--write-transport`                      | `rest` (default, HTTPS) — chosen for security; `grpc` (opt-in) — only when you control the node or accept plaintext risk on public TronGrid. |
 | `--grpc-url` / `--grpc-insecure`         | Used only with `--write-transport grpc` (TronGrid gRPC is plaintext).     |
 | `--force`                                | Skip network-mismatch confirmation on supported hot/offline operations. |
 
@@ -124,7 +124,7 @@ If you run **`hot balance`**, **`hot send-trx`**, or **`hot send-usdt`** with a 
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Hot sends use **HTTPS REST** to TronGrid by default (`https://api.trongrid.io` on mainnet: `/wallet/createtransaction`, `/wallet/triggersmartcontract`, `/wallet/broadcasthex`) and sign in-process. For legacy or custom full nodes, opt in with `--write-transport grpc` (and usually `--grpc-insecure` for TronGrid or local `java-tron`). You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
+Hot sends use **HTTPS REST** to TronGrid by default (`https://api.trongrid.io` on mainnet: `/wallet/createtransaction`, `/wallet/triggersmartcontract`, `/wallet/broadcasthex`) and sign in-process. HTTPS REST is the default because public TronGrid gRPC endpoints are plaintext (no TLS). Use `--write-transport grpc` only for your own node or when you explicitly accept the MITM risk. You need enough **TRX** for bandwidth/energy; USDT transfers consume energy — fund the hot address accordingly.
 
 ## Security notes
 

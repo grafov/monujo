@@ -21,7 +21,7 @@ flowchart LR
     ext["внешний координатор<br/>TronWeb / TronLink / TronScan"] -- tron JSON --> me["monujo multisig cosign<br/>(offline)"]
     me -- tron JSON / monujo envelope --> next["следующий ко-signer"]
     next -- "..." --> last["monujo multisig broadcast<br/>(online)"]
-    last -- broadcast --> chain[("Tron node gRPC<br/>GetTransactionSignWeight<br/>BroadcastTransaction")]
+    last -- broadcast --> chain[("Tron node HTTPS REST<br/>/wallet/getsignweight<br/>/wallet/broadcasthex")]
 ```
 
 ## Формат файлов
@@ -99,7 +99,7 @@ Online read-only. Показывает, сколько подписей уже �
 monujo multisig info --in tx.cosigned.json [--format ...] [--hmac-*]
 ```
 
-Делает один gRPC вызов `GetTransactionSignWeight`; broadcast и подпись
+Делает вызов `/wallet/getsignweight` через HTTPS REST (или gRPC при opt-in); broadcast и подпись
 не выполняются.
 
 ### `monujo multisig broadcast`

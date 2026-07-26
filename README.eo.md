@@ -46,7 +46,7 @@ Postulas Go 1.24+ (vidu `go.mod`).
 | `--network`                              | `mainnet` (defaŭlte) aŭ `shasta` (testreto; USDT-kontrakto diferencas).          |
 | `--output`                               | `table` aŭ `json`.                                                               |
 | `--http-url` / `--grpc-url`              | Anstataŭigi TronGrid HTTP-bazan URL-on kaj gRPC `host:port`.                     |
-| `--write-transport`                      | `rest` (defaŭlte, HTTPS) aŭ `grpc` (opt-in).                                       |
+| `--write-transport`                      | `rest` (defaŭlte, HTTPS) — elektita pro sekureco; `grpc` (opt-in) — nur se vi kontrolas la nodon aŭ akceptas plaintext-riskon ĉe publika TronGrid. |
 | `--grpc-url` / `--grpc-insecure`         | Nur kun `--write-transport grpc` (TronGrid gRPC estas plaintext).                  |
 | `--force`                                | Preterpasi konfirmon pri ret-malkongruo ĉe subtenataj varmaj/senretaj operacioj. |
 
@@ -125,7 +125,7 @@ Se vi rulas **`hot balance`**, **`hot send-trx`**, aŭ **`hot send-usdt`** kun `
 ./build/monujo hot send-usdt --from myhot --to <ADDR> --amount 10.25
 ```
 
-Varmaj sendoj defaŭlte uzas **HTTPS REST** al TronGrid (`https://api.trongrid.io` en mainnet) kaj subskribas en-proceze. Por propra nodo aŭ legacy gRPC: `--write-transport grpc` (ofte kun `--grpc-insecure` por TronGrid aŭ loka `java-tron`). Vi bezonas sufiĉe da **TRX** por bendolarĝo/energio; USDT-transigoj konsumas energion.
+Varmaj sendoj defaŭlte uzas **HTTPS REST** al TronGrid (`https://api.trongrid.io` en mainnet) kaj subskribas en-proceze. HTTPS REST estas defaŭlta ĉar publikaj gRPC-finoj de TronGrid estas plaintext (sen TLS). Uzu `--write-transport grpc` nur por via propra nodo aŭ se vi eksplicite akceptas la MITM-riskon. Vi bezonas sufiĉe da **TRX** por bendolarĝo/energio; USDT-transigoj konsumas energion.
 
 ## Sekurecaj notoj
 
