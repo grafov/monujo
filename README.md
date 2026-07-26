@@ -6,6 +6,8 @@ This text in [Esperanto](README.eo.md) | [Русский](README.ru.md)
 
 Monujo is a minimal **Go CLI** tool for **Tron blockchain** and **USDT (TRC-20)** operations. It provides secure cryptocurrency management with multiple operational modes to suit different security requirements.
 
+Firstly I made this utility for personal use. But may be it could be useful as example of TRON wallets handling with Go language. So finally I decided to make it public.
+
 ## Features
 
 - **Watch-only mode**: Query balances and transaction history for any Tron address without requiring private keys

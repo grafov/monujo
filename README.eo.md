@@ -6,6 +6,9 @@ This text in [English](README.md) | [Русский](README.ru.md)
 
 Monujo estas minimuma **Go CLI** ilo por operacioj en la blokĉeno **Tron** kaj kun **USDT (TRC-20)**. Ĝi provizas sekuran administradon de kriptovalutoj kun pluraj operaciaj reĝimoj por konveni malsamajn sekurecajn postulojn.
 
+Unufoje mi kreis la kodon por mia mem bezonoj. Sed poste mi decidis publiki la
+kodon kiel Go-lingva ekzеmplo de ellaboro kun TRON monujoj.
+
 ## Trajtoj
 
 - **Nur-lega reĝimo**: Kontrolu saldojn kaj transakcian historion por iu ajn Tron-adreso sen bezoni privatajn ŝlosilojn
