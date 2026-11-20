@@ -96,10 +96,10 @@ type mockWallet struct {
 
 	calls *recordedCalls
 
-	createTx2      func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
-	trigger        func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
-	broadcast      func(context.Context, *core.Transaction) (*api.Return, error)
-	getSignWeight  func(context.Context, *core.Transaction) (*api.TransactionSignWeight, error)
+	createTx2     func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
+	trigger       func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	broadcast     func(context.Context, *core.Transaction) (*api.Return, error)
+	getSignWeight func(context.Context, *core.Transaction) (*api.TransactionSignWeight, error)
 }
 
 func (m *mockWallet) CreateTransaction2(ctx context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
@@ -177,6 +177,43 @@ func okBroadcast() *api.Return {
 	return &api.Return{Result: true, Code: api.Return_SUCCESS}
 }
 
+func echoTRXExtension(in *core.TransferContract) *api.TransactionExtention {
+	return okExtention(&core.TransactionRaw{
+		RefBlockBytes: []byte{0xab, 0xcd},
+		Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:     time.Now().UnixMilli(),
+		Contract: []*core.Transaction_Contract{
+			{
+				Type: core.Transaction_Contract_TransferContract,
+				Parameter: mustEncodeAny(&core.TransferContract{
+					OwnerAddress: append([]byte(nil), in.GetOwnerAddress()...),
+					ToAddress:    append([]byte(nil), in.GetToAddress()...),
+					Amount:       in.GetAmount(),
+				}),
+			},
+		},
+	})
+}
+
+func echoUSDTExtension(in *core.TriggerSmartContract, feeLimit int64) *api.TransactionExtention {
+	return okExtention(&core.TransactionRaw{
+		RefBlockBytes: []byte{0xff, 0xee},
+		Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:     time.Now().UnixMilli(),
+		FeeLimit:      feeLimit,
+		Contract: []*core.Transaction_Contract{
+			{
+				Type: core.Transaction_Contract_TriggerSmartContract,
+				Parameter: mustEncodeAny(&core.TriggerSmartContract{
+					OwnerAddress:    append([]byte(nil), in.GetOwnerAddress()...),
+					ContractAddress: append([]byte(nil), in.GetContractAddress()...),
+					Data:            append([]byte(nil), in.GetData()...),
+				}),
+			},
+		},
+	})
+}
+
 func mustGenerateKey() *ecdsa.PrivateKey {
 	GinkgoHelper()
 	k, err := crypto.GenerateKey()
@@ -232,14 +269,8 @@ var _ = Describe("GRPCWriteClient", func() {
 	Describe("SendTRX", func() {
 		Context("when the upstream accepts the transfer", func() {
 			BeforeEach(func() {
-				mock.createTx2 = func(_ context.Context, _ *core.TransferContract) (*api.TransactionExtention, error) {
-					raw := &core.TransactionRaw{
-						RefBlockBytes: []byte{0xab, 0xcd},
-						Expiration:    time.Now().Add(time.Minute).UnixMilli(),
-						Timestamp:     time.Now().UnixMilli(),
-						Data:          []byte("trx-transfer"),
-					}
-					return okExtention(raw), nil
+				mock.createTx2 = func(_ context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
+					return echoTRXExtension(in), nil
 				}
 				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
 					return okBroadcast(), nil
@@ -286,10 +317,46 @@ var _ = Describe("GRPCWriteClient", func() {
 			})
 		})
 
+		Context("when the node returns a different recipient", func() {
+			BeforeEach(func() {
+				mock.createTx2 = func(_ context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
+					in.ToAddress = mustDecodeBase58(testFromAddr)
+					return echoTRXExtension(in), nil
+				}
+				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
+					return okBroadcast(), nil
+				}
+			})
+
+			It("refuses to sign and does not broadcast", func() {
+				_, err := wc.SendTRX(context.Background(), testFromAddr, testToAddr, 1_500_000, priv)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("does not match the request"))
+				Expect(err.Error()).To(ContainSubstring("to="))
+				Expect(calls.broadcastCalls).To(BeEmpty())
+			})
+		})
+
+		Context("when the node returns a different amount", func() {
+			BeforeEach(func() {
+				mock.createTx2 = func(_ context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
+					in.Amount++
+					return echoTRXExtension(in), nil
+				}
+			})
+
+			It("refuses to sign and does not broadcast", func() {
+				_, err := wc.SendTRX(context.Background(), testFromAddr, testToAddr, 1_500_000, priv)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("amount="))
+				Expect(calls.broadcastCalls).To(BeEmpty())
+			})
+		})
+
 		Context("when broadcast reports a non-success code", func() {
 			BeforeEach(func() {
-				mock.createTx2 = func(context.Context, *core.TransferContract) (*api.TransactionExtention, error) {
-					return okExtention(&core.TransactionRaw{Data: []byte("x")}), nil
+				mock.createTx2 = func(_ context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
+					return echoTRXExtension(in), nil
 				}
 				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
 					return &api.Return{
@@ -323,8 +390,11 @@ var _ = Describe("GRPCWriteClient", func() {
 				cancel()
 				cancelled = ctx
 
-				mock.createTx2 = func(context.Context, *core.TransferContract) (*api.TransactionExtention, error) {
-					return okExtention(&core.TransactionRaw{Data: []byte("x")}), nil
+				mock.createTx2 = func(ctx context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+					return echoTRXExtension(in), nil
 				}
 				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
 					return okBroadcast(), nil
@@ -345,14 +415,8 @@ var _ = Describe("GRPCWriteClient", func() {
 	Describe("SendUSDT", func() {
 		Context("when the upstream accepts the transfer", func() {
 			BeforeEach(func() {
-				mock.trigger = func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
-					raw := &core.TransactionRaw{
-						RefBlockBytes: []byte{0xff, 0xee},
-						Expiration:    time.Now().Add(time.Minute).UnixMilli(),
-						Timestamp:     time.Now().UnixMilli(),
-						Data:          []byte("trc20-transfer"),
-					}
-					return okExtention(raw), nil
+				mock.trigger = func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+					return echoUSDTExtension(in, cfg.DefaultFeeLimitSun), nil
 				}
 				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
 					return okBroadcast(), nil
@@ -371,7 +435,7 @@ var _ = Describe("GRPCWriteClient", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				data := calls.triggerCalls[0].GetData()
-				Expect(data).To(HaveLen(4 + 32 + 32),
+				Expect(data).To(HaveLen(4+32+32),
 					"selector(4) + addr(32) + amount(32)")
 				Expect(hex.EncodeToString(data[:4])).To(Equal(trc20TransferSelector))
 				Expect(hex.EncodeToString(data[len(data)-32:])).To(Equal(
@@ -404,10 +468,41 @@ var _ = Describe("GRPCWriteClient", func() {
 			})
 		})
 
+		Context("when the node attaches call_value to the USDT transfer", func() {
+			BeforeEach(func() {
+				mock.trigger = func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+					return okExtention(&core.TransactionRaw{
+						RefBlockBytes: []byte{0xff, 0xee},
+						Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+						Timestamp:     time.Now().UnixMilli(),
+						FeeLimit:      cfg.DefaultFeeLimitSun,
+						Contract: []*core.Transaction_Contract{
+							{
+								Type: core.Transaction_Contract_TriggerSmartContract,
+								Parameter: mustEncodeAny(&core.TriggerSmartContract{
+									OwnerAddress:    append([]byte(nil), in.GetOwnerAddress()...),
+									ContractAddress: append([]byte(nil), in.GetContractAddress()...),
+									Data:            append([]byte(nil), in.GetData()...),
+									CallValue:       1_000_000,
+								}),
+							},
+						},
+					}), nil
+				}
+			})
+
+			It("refuses to sign and does not broadcast", func() {
+				_, err := wc.SendUSDT(context.Background(), testFromAddr, testToAddr, mustParseBigInt("1"), priv)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("call_value"))
+				Expect(calls.broadcastCalls).To(BeEmpty())
+			})
+		})
+
 		Context("when broadcast reports failure", func() {
 			BeforeEach(func() {
-				mock.trigger = func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error) {
-					return okExtention(&core.TransactionRaw{Data: []byte("x")}), nil
+				mock.trigger = func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+					return echoUSDTExtension(in, cfg.DefaultFeeLimitSun), nil
 				}
 				mock.broadcast = func(context.Context, *core.Transaction) (*api.Return, error) {
 					return &api.Return{

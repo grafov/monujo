@@ -34,6 +34,7 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/grafov/monujo/internal/config"
+	"github.com/grafov/monujo/internal/transfer"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -67,6 +68,15 @@ func (h *HTTPWriteClient) SendTRX(ctx context.Context, fromAddr, toAddr string, 
 	if err != nil {
 		return "", err
 	}
+	if err := VerifyBuiltTransfer(tx, TransferSpec{
+		Network: h.cfg.Network,
+		Kind:    transfer.KindTRX,
+		From:    fromAddr,
+		To:      toAddr,
+		Amount:  big.NewInt(amountSun),
+	}); err != nil {
+		return "", err
+	}
 	return h.signAndBroadcast(ctx, tx, priv)
 }
 
@@ -75,6 +85,16 @@ func (h *HTTPWriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string,
 	contract := USDTContractForNetwork(h.cfg.Network)
 	tx, err := h.CreateTRC20Transfer(ctx, fromAddr, toAddr, contract, amount)
 	if err != nil {
+		return "", err
+	}
+	if err := VerifyBuiltTransfer(tx, TransferSpec{
+		Network:     h.cfg.Network,
+		Kind:        transfer.KindTRC20USDT,
+		From:        fromAddr,
+		To:          toAddr,
+		Amount:      amount,
+		FeeLimitSun: h.cfg.DefaultFeeLimitSun,
+	}); err != nil {
 		return "", err
 	}
 	return h.signAndBroadcast(ctx, tx, priv)

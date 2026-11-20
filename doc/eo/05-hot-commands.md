@@ -146,10 +146,13 @@ monujo hot send-trx --from <NAME> --to <ADDR> --amount <TRX>
 4. Validigo de ricevanta adreso.
 5. Deĉifrado de ŝlosilujo.
 6. Konstruo de transakcio per HTTPS REST (`/wallet/createtransaction`
-   defaŭlte; opt-in gRPC — `gotron-sdk` `Transfer`), ECDSA-subskribo,
-   elsendo (`/wallet/broadcasthex` aŭ gRPC `Broadcast`).
-7. Se elsendo redonas ne-nulan kodon — eraro `broadcast: <message>`.
-8. Aldono de `--network` al metadatenoj.
+   defaŭlte; opt-in gRPC — `gotron-sdk` `Transfer`). monujo malkodas
+   la transakcion, kiun la nodo redonis, kaj rifuzas subskribi ĝin, se
+   la posedanto, ricevanto aŭ sumo ne kongruas kun la peto, aŭ se la
+   transakcio portas memorandon aŭ kroman kontrakton.
+7. ECDSA-subskribo, elsendo (`/wallet/broadcasthex` aŭ gRPC `Broadcast`).
+8. Se elsendo redonas ne-nulan kodon — eraro `broadcast: <message>`.
+9. Aldono de `--network` al metadatenoj.
 
 ### Ekzemplo: formato `table`
 
@@ -233,8 +236,13 @@ monujo hot send-usdt --from <NAME> --to <ADDR> --amount <USDT>
 5. Deĉifrado de ŝlosilujo.
 6. REST: `POST /wallet/triggersmartcontract` (USDT `transfer(address,uint256)`,
    `fee_limit=100_000_000` sun) aŭ opt-in gRPC `TRC20Send`.
-7. ECDSA-subskribo, elsendo.
-8. Aldono de `--network` al metadatenoj.
+7. monujo malkodas la respondon de la nodo kaj rifuzas subskribi, se
+   tio ne estas simpla translokigo de la kanona USDT-kontrakto por
+   `--network`: sama posedanto, ricevanto kaj sumo, `fee_limit` egala
+   al la agordita limo, kaj `call_value`, `call_token_value`,
+   `token_id` kaj la memorando de la transakcio malplenaj.
+8. ECDSA-subskribo, elsendo.
+9. Aldono de `--network` al metadatenoj.
 
 ### Ekzemplo: formato `table`
 

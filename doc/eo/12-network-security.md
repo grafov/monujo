@@ -99,7 +99,12 @@ realigas la saman HTTP- kaj (kiam bezonate) Wallet-gRPC-interfacon.
    estas eraro (neniu silenta refalo al REST).
 
 3. **Fido al la nodo.** La nodo vidas adresojn, kvantojn kaj
-   subskribitajn transakciojn.
+   subskribitajn transakciojn. Ĝi ne povas ŝanĝi tion, kion subskribas
+   `hot send` aŭ `offline build`: monujo komparas la redonitan
+   transakcion kun la peto kaj rifuzas interŝanĝitan ricevanton,
+   sumon, kontrakton aŭ kotizlimon, kaj kaŝitan aldonitan valoron.
+   La nodo ankoraŭ povas rifuzi servon aŭ ekscii la metadatumojn de
+   la peto.
 
 4. **Neniu triparta telemetrio.** Eliranta trafiko limiĝas al la
    agorditaj HTTP/gRPC-finpunktoj (vidu la tabelojn supre).

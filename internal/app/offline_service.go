@@ -252,12 +252,15 @@ func (o *OfflineService) Sign(opts SignOptions) (transfer.FileFingerprint, error
 	if err != nil {
 		return fp, fmt.Errorf("decode raw_data: %w", err)
 	}
-	if err := verifyPayloadAgainstSummary(pl, summary); err != nil {
-		return fp, err
-	}
 	if pl.Chain != chainForCfg(o.cfg) {
 		return fp, fmt.Errorf("envelope chain %q does not match current --network %q",
 			pl.Chain, chainForCfg(o.cfg))
+	}
+	if err := verifyPayloadAgainstSummary(pl, summary); err != nil {
+		return fp, err
+	}
+	if err := summary.CheckPlainTransfer(o.cfg.Network); err != nil {
+		return fp, err
 	}
 
 	o.printConfirm("about to SIGN unsigned transfer", pl, fp, opts.InPath, hmacKey != nil)
@@ -384,12 +387,15 @@ func (o *OfflineService) Broadcast(ctx context.Context, opts BroadcastOptions) (
 	if err != nil {
 		return zero, fmt.Errorf("decode raw_data: %w", err)
 	}
-	if err := verifySignedAgainstSummary(signed, summary); err != nil {
-		return zero, err
-	}
 	if signed.Chain != chainForCfg(o.cfg) {
 		return zero, fmt.Errorf("envelope chain %q does not match current --network %q",
 			signed.Chain, chainForCfg(o.cfg))
+	}
+	if err := verifySignedAgainstSummary(signed, summary); err != nil {
+		return zero, err
+	}
+	if err := summary.CheckPlainTransfer(o.cfg.Network); err != nil {
+		return zero, err
 	}
 
 	o.printSignedConfirm("about to BROADCAST signed transfer", signed, fp, opts.InPath, hmacKey != nil)

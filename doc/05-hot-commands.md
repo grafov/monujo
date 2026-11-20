@@ -146,10 +146,13 @@ monujo hot send-trx --from <NAME> --to <ADDR> --amount <TRX>
 4. Recipient address validation.
 5. Keystore decryption.
 6. Transaction construction via HTTPS REST (`/wallet/createtransaction`
-   by default; opt-in gRPC — `gotron-sdk` `Transfer`), ECDSA signing,
-   broadcast (`/wallet/broadcasthex` or gRPC `Broadcast`).
-7. If broadcast returns a non-zero code — error `broadcast: <message>`.
-8. Append `--network` to metadata.
+   by default; opt-in gRPC — `gotron-sdk` `Transfer`). monujo decodes
+   the transaction the node returned and refuses to sign it unless the
+   owner, recipient and amount match the request and the transaction
+   carries no memo and no extra contract.
+7. ECDSA signing, broadcast (`/wallet/broadcasthex` or gRPC `Broadcast`).
+8. If broadcast returns a non-zero code — error `broadcast: <message>`.
+9. Append `--network` to metadata.
 
 ### Example: `table` format
 
@@ -233,8 +236,13 @@ monujo hot send-usdt --from <NAME> --to <ADDR> --amount <USDT>
 5. Keystore decryption.
 6. REST: `POST /wallet/triggersmartcontract` (USDT `transfer(address,uint256)`,
    `fee_limit=100_000_000` sun) or opt-in gRPC `TRC20Send`.
-7. ECDSA signing, broadcast.
-8. Append `--network` to metadata.
+7. monujo decodes the returned transaction and refuses to sign unless
+   it is a plain transfer of the canonical USDT contract for
+   `--network`: same owner, recipient and amount, `fee_limit` equal to
+   the configured limit, and `call_value`, `call_token_value`,
+   `token_id` and the transaction memo all clear.
+8. ECDSA signing, broadcast.
+9. Append `--network` to metadata.
 
 ### Example: `table` format
 

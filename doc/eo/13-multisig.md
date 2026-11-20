@@ -68,7 +68,14 @@ Senrete. Akceptas plursubskriban transakcion, kontrolas
 `raw_data_hex` kontraŭ homlegeblaj kampoj (por TRX kaj USDT —
 streĉa kontrolo kun rifuzo ĉe malkongruo; por aliaj kontraktoj —
 averto kaj konfirmo), subskribas per ŝlosilo el la ŝlosilujo, kaj
-skribas la ĝisdatigitan dosieron. Rifuzas meti duan subskribon per
+skribas la ĝisdatigitan dosieron. Koverto monujo de speco TRX aŭ USDT
+estas ankaŭ rifuzata, kiam `raw_data` aldonas TRX (`call_value`),
+TRC-10-ĵetonon aŭ memorandon, aŭ kiam la TRC-20-kontrakto ne estas la
+kanona USDT: la koverto pretendas simplan translokigon, kiun la
+transakcio ne kongruas. Tron-JSON-enigo, aŭ koverto monujo jam markita
+`unknown_contract`, tamen montras tiujn kampojn kaj WARNING kaj petas
+konfirmon (`--yes` preterpasas la demandon, kiel por iu ajn alia
+kontrakto). Rifuzas meti duan subskribon per
 la sama ŝlosilo — tio estus hazarda duobla subskribo kiu en Tron
 simple ne pliigas pezon — krom se `--force` estas pasita.
 

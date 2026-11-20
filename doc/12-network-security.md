@@ -97,7 +97,11 @@ implements the same HTTP and (when needed) Wallet gRPC interface.
    are an error (no silent fallback to REST).
 
 3. **Trust in the node.** The node sees addresses, amounts, and signed
-   transactions.
+   transactions. It cannot change what `hot send` or `offline build`
+   signs: monujo checks the returned transaction against the request
+   and rejects a swapped recipient, amount, contract or fee limit, and
+   any hidden attached value. The node can still refuse service or
+   learn the metadata of the request.
 
 4. **No third-party telemetry.** Outbound traffic is limited to the
    configured HTTP/gRPC endpoints (see the tables above).

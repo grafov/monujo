@@ -67,7 +67,13 @@ Offline. Accepts a multisig transaction, verifies `raw_data_hex`
 against human-readable fields (for TRX and USDT — strict check with
 refusal on mismatch; for other contracts — a warning and
 confirmation), signs with a key from the keystore, and writes the
-updated file. Refuses to place a second signature with the same key —
+updated file. A TRX or USDT monujo envelope is also refused when
+`raw_data` attaches TRX (`call_value`), a TRC-10 token, or a memo, or
+when the TRC-20 contract is not canonical USDT: the envelope claims a
+plain transfer the transaction does not match. A Tron JSON input, or a
+monujo envelope already marked `unknown_contract`, still shows those
+fields and a WARNING and asks for confirmation (`--yes` skips the
+question, as for any other contract). Refuses to place a second signature with the same key —
 that would be an accidental double signature that on Tron simply does
 not increase weight — unless `--force` is passed.
 

@@ -142,10 +142,13 @@ monujo hot send-trx --from <ИМЯ> --to <ADDR> --amount <TRX>
 4. Валидация адреса получателя.
 5. Расшифровка keystore.
 6. Построение транзакции через HTTPS REST (`/wallet/createtransaction`
-   по умолчанию; opt-in gRPC — `gotron-sdk` `Transfer`), подписание
-   ECDSA, рассылка (`/wallet/broadcasthex` или gRPC `Broadcast`).
-7. Если broadcast вернул не‑нулевой код — ошибка `broadcast: <message>`.
-8. Дозапись `--network` в метаданные.
+   по умолчанию; opt-in gRPC — `gotron-sdk` `Transfer`). monujo
+   декодирует транзакцию, которую вернул узел, и отказывается её
+   подписывать, если владелец, получатель или сумма не совпадают с
+   запросом, либо в транзакции есть memo или лишний контракт.
+7. Подписание ECDSA, рассылка (`/wallet/broadcasthex` или gRPC `Broadcast`).
+8. Если broadcast вернул не‑нулевой код — ошибка `broadcast: <message>`.
+9. Дозапись `--network` в метаданные.
 
 ### Пример: формат `table`
 
@@ -230,8 +233,13 @@ monujo hot send-usdt --from <ИМЯ> --to <ADDR> --amount <USDT>
 5. Расшифровка keystore.
 6. REST: `POST /wallet/triggersmartcontract` (USDT `transfer(address,uint256)`,
    `fee_limit=100_000_000` sun) или opt-in gRPC `TRC20Send`.
-7. Подписание ECDSA, broadcast.
-8. Дозапись `--network` в метаданные.
+7. monujo декодирует ответ узла и отказывается подписывать транзакцию,
+   если это не простой перевод канонического USDT-контракта для
+   `--network`: тот же владелец, получатель и сумма, `fee_limit` равен
+   настроенному пределу, а `call_value`, `call_token_value`, `token_id`
+   и memo транзакции пусты.
+8. Подписание ECDSA, broadcast.
+9. Дозапись `--network` в метаданные.
 
 ### Пример: формат `table`
 

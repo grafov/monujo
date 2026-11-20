@@ -16,6 +16,7 @@
 package tron
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/sha256"
@@ -120,6 +121,15 @@ func BuildUnsignedTRX(ctx context.Context, w TransactionWriter, net config.Netwo
 	if err != nil {
 		return zero, err
 	}
+	if err := VerifyBuiltTransfer(tx, TransferSpec{
+		Network: net,
+		Kind:    transfer.KindTRX,
+		From:    from,
+		To:      to,
+		Amount:  big.NewInt(amountSun),
+	}); err != nil {
+		return zero, err
+	}
 	raw := tx.GetRawData()
 	rawHex, err := rawDataToHex(raw)
 	if err != nil {
@@ -168,6 +178,16 @@ func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Netw
 	if err != nil {
 		return zero, err
 	}
+	if err := VerifyBuiltTransfer(tx, TransferSpec{
+		Network:     net,
+		Kind:        transfer.KindTRC20USDT,
+		From:        from,
+		To:          to,
+		Amount:      amount,
+		FeeLimitSun: feeLimitSun,
+	}); err != nil {
+		return zero, err
+	}
 	raw := tx.GetRawData()
 	rawHex, err := rawDataToHex(raw)
 	if err != nil {
@@ -176,10 +196,6 @@ func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Netw
 	txid, err := txIDFromRawData(raw)
 	if err != nil {
 		return zero, err
-	}
-	fee := raw.GetFeeLimit()
-	if fee == 0 {
-		fee = feeLimitSun
 	}
 	return transfer.UnsignedTransferPayload{
 		Version:       transfer.EnvelopeVersion,
@@ -190,7 +206,7 @@ func BuildUnsignedUSDT(ctx context.Context, w TransactionWriter, net config.Netw
 		Amount:        domain.FormatMinimalUSDT(amount) + " USDT",
 		AmountMinimal: amount.String(),
 		Contract:      contract,
-		FeeLimitSun:   fee,
+		FeeLimitSun:   raw.GetFeeLimit(),
 		RawDataHex:    rawHex,
 		Expiration:    raw.GetExpiration(),
 		Timestamp:     raw.GetTimestamp(),
@@ -258,16 +274,28 @@ func BroadcastSigned(ctx context.Context, w TransactionWriter, rawDataHex, sigHe
 // RawDataSummary holds the human-readable fields decoded from a
 // TransactionRaw's first contract. It is used by both signer and
 // broadcaster to independently verify what the payload claims.
+//
+// CallValueSun, CallTokenValue and TokenID come from TriggerSmartContract
+// and are zero for a native TRX transfer. A non-zero value means the
+// transaction moves TRX or a TRC-10 token in addition to the decoded
+// transfer() call. Memo is raw_data.data (a Tron transaction note); it is
+// nil when the field is empty. PermissionID is the first contract's
+// permission_id (0 is the owner permission).
 type RawDataSummary struct {
-	Kind         string
-	From         string
-	To           string
-	AmountStr    string
-	AmountWei    *big.Int
-	Contract     string
-	FeeLimitSun  int64
-	ExpirationMs int64
-	TimestampMs  int64
+	Kind           string
+	From           string
+	To             string
+	AmountStr      string
+	AmountWei      *big.Int
+	Contract       string
+	FeeLimitSun    int64
+	ExpirationMs   int64
+	TimestampMs    int64
+	CallValueSun   int64
+	CallTokenValue int64
+	TokenID        int64
+	PermissionID   int32
+	Memo           []byte
 }
 
 // DecodeRawDataPermissionID parses rawDataHex and returns the Permission_id
@@ -288,25 +316,43 @@ func DecodeRawDataPermissionID(rawDataHex string) int32 {
 }
 
 // DecodeRawDataSummary parses rawDataHex and extracts the kind/from/to/amount
-// fields from the first contract. Supports TRX TransferContract and
-// TRC-20 transfer(address,uint256) via TriggerSmartContract; other contract
-// types are rejected so the offline signer never produces a payload it
-// cannot show to the human.
+// fields from the first contract, plus any attached value the signer must
+// show or reject: call_value, call_token_value, token_id, permission_id and
+// the transaction memo. Supports TRX TransferContract and TRC-20
+// transfer(address,uint256) via TriggerSmartContract; other contract types
+// are rejected so the offline signer never produces a payload it cannot
+// show to the human.
+//
+// AmountStr uses the " USDT" suffix only when the contract is the canonical
+// mainnet or Shasta USDT token. Any other TRC-20 is labeled with its
+// minimal-unit amount and contract address, so a lookalike token is not
+// presented as USDT.
 func DecodeRawDataSummary(rawDataHex string) (RawDataSummary, error) {
-	var out RawDataSummary
 	raw, err := decodeRawDataHex(rawDataHex)
 	if err != nil {
-		return out, err
+		return RawDataSummary{}, err
+	}
+	return summarizeRaw(raw)
+}
+
+func summarizeRaw(raw *core.TransactionRaw) (RawDataSummary, error) {
+	var out RawDataSummary
+	if raw == nil {
+		return out, errors.New("offline: nil raw data")
 	}
 	out.ExpirationMs = raw.GetExpiration()
 	out.TimestampMs = raw.GetTimestamp()
 	out.FeeLimitSun = raw.GetFeeLimit()
+	if memo := raw.GetData(); len(memo) > 0 {
+		out.Memo = bytes.Clone(memo)
+	}
 
 	contracts := raw.GetContract()
 	if len(contracts) != 1 {
 		return out, fmt.Errorf("offline: expected exactly one contract, got %d", len(contracts))
 	}
 	c := contracts[0]
+	out.PermissionID = c.GetPermissionId()
 	switch c.GetType() {
 	case core.Transaction_Contract_TransferContract:
 		var tc core.TransferContract
@@ -332,11 +378,25 @@ func DecodeRawDataSummary(rawDataHex string) (RawDataSummary, error) {
 		out.Contract = common.EncodeCheck(ts.GetContractAddress())
 		out.To = to
 		out.AmountWei = amount
-		out.AmountStr = domain.FormatMinimalUSDT(amount) + " USDT"
+		out.AmountStr = trc20AmountStr(amount, out.Contract)
+		out.CallValueSun = ts.GetCallValue()
+		out.CallTokenValue = ts.GetCallTokenValue()
+		out.TokenID = ts.GetTokenId()
 	default:
 		return out, fmt.Errorf("offline: unsupported contract type %v (only TRX transfer and TRC-20 transfer are supported)", c.GetType())
 	}
 	return out, nil
+}
+
+func trc20AmountStr(amount *big.Int, contract string) string {
+	if contract == MainnetUSDTContract || contract == ShastaTestUSDTContract {
+		return domain.FormatMinimalUSDT(amount) + " USDT"
+	}
+	minimal := "0"
+	if amount != nil {
+		minimal = amount.String()
+	}
+	return fmt.Sprintf("%s (contract %s)", minimal, contract)
 }
 
 // unmarshalAny decodes a protobuf Any into msg, ignoring the type URL (gotron

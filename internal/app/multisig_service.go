@@ -471,8 +471,10 @@ func (m *MultisigService) renderOutput(format MultisigFormat, in MultisigInput, 
 
 // buildMonujoFromTronJSON synthesizes a [transfer.MultisigTransferPayload]
 // from a Tron JSON input (which does not carry monujo display fields).
-// TRX and TRC-20 transfers are populated fully; other contract types get
-// KindUnknownContract and leave to/amount/contract empty.
+// A plain TRX or canonical USDT transfer is populated fully. Any other
+// contract, and a TRC-20 call that also moves TRX, TRC-10 or carries a
+// memo, becomes KindUnknownContract so the next signer sees a warning
+// instead of a hard refusal against a kind that claims a plain transfer.
 func buildMonujoFromTronJSON(in MultisigInput, cfg *config.Config) transfer.MultisigTransferPayload {
 	pl := transfer.MultisigTransferPayload{
 		Version:    transfer.EnvelopeVersion,
@@ -497,6 +499,9 @@ func buildMonujoFromTronJSON(in MultisigInput, cfg *config.Config) transfer.Mult
 		pl.AmountMinimal = summary.AmountWei.String()
 	}
 	pl.PermissionID = tron.DecodeRawDataPermissionID(in.RawDataHex)
+	if len(summary.PlainTransferIssues(cfg.Network)) > 0 {
+		pl.Kind = transfer.KindUnknownContract
+	}
 	return pl
 }
 
@@ -552,9 +557,24 @@ func (m *MultisigService) renderSummary(in MultisigInput, s tron.RawDataSummary,
 	if s.FeeLimitSun > 0 {
 		fields["fee_limit_sun"] = fmt.Sprintf("%d", s.FeeLimitSun)
 	}
+	if s.CallValueSun != 0 {
+		fields["call_value_sun"] = fmt.Sprintf("%d", s.CallValueSun)
+	}
+	if s.CallTokenValue != 0 {
+		fields["call_token_value"] = fmt.Sprintf("%d", s.CallTokenValue)
+	}
+	if s.TokenID != 0 {
+		fields["token_id"] = fmt.Sprintf("%d", s.TokenID)
+	}
+	if len(s.Memo) > 0 {
+		fields["memo_hex"] = hex.EncodeToString(s.Memo)
+	}
 	fields["expiration"] = tron.FormatExpirationISO(s.ExpirationMs)
+	for _, issue := range s.PlainTransferIssues(m.cfg.Network) {
+		warnings = append(warnings, issue)
+	}
 	if in.Format == MultisigFormatMonujo && in.Envelope.Chain != "" {
-		if err := verifyMultisigEnvelopeAgainstSummary(in.Envelope, s); err != nil {
+		if err := verifyMultisigEnvelopeAgainstSummary(in.Envelope, s, m.cfg.Network); err != nil {
 			return kind, fields, warnings, err
 		}
 	}
@@ -562,12 +582,18 @@ func (m *MultisigService) renderSummary(in MultisigInput, s tron.RawDataSummary,
 }
 
 // verifyMultisigEnvelopeAgainstSummary checks that a monujo-format input
-// agrees with the raw_data on the authoritative fields. For
-// KindUnknownContract we only check that the decoded summary also could
-// not map to TRX/USDT (which would be a contradiction).
-func verifyMultisigEnvelopeAgainstSummary(p transfer.MultisigTransferPayload, s tron.RawDataSummary) error {
+// agrees with the raw_data on the authoritative fields. KindUnknownContract
+// skips the field comparison. A TRX or USDT envelope is refused when the
+// raw_data is not a plain transfer on net, because the envelope claims a
+// transfer the decoded transaction does not match.
+func verifyMultisigEnvelopeAgainstSummary(p transfer.MultisigTransferPayload, s tron.RawDataSummary, net config.Network) error {
 	if p.Kind == transfer.KindUnknownContract {
 		return nil
+	}
+	if p.Kind == transfer.KindTRX || p.Kind == transfer.KindTRC20USDT {
+		if issues := s.PlainTransferIssues(net); len(issues) > 0 {
+			return fmt.Errorf("envelope kind %q claims a plain transfer: %s", p.Kind, strings.Join(issues, "; "))
+		}
 	}
 	if p.Kind != s.Kind {
 		return fmt.Errorf("kind mismatch: payload=%q raw_data=%q", p.Kind, s.Kind)
@@ -687,9 +713,9 @@ func (m *MultisigService) printCosignConfirm(in MultisigInput, signerAddr string
 	fmt.Fprintf(w, "  signer:        %s\n", signerAddr)
 	fmt.Fprintf(w, "  existing sigs: %d\n", len(in.SignaturesHex))
 	fmt.Fprintf(w, "  kind:          %s\n", kind)
-	for _, k := range []string{"from", "to", "amount", "amount_minimal", "contract", "fee_limit_sun", "expiration"} {
+	for _, k := range multisigPreviewKeys {
 		if v, ok := fields[k]; ok && v != "" {
-			fmt.Fprintf(w, "  %-14s %s\n", k+":", v)
+			fmt.Fprintf(w, "  %-18s %s\n", k+":", v)
 		}
 	}
 	for _, warn := range warnings {
@@ -707,14 +733,19 @@ func (m *MultisigService) printBroadcastConfirm(in MultisigInput, kind string, f
 	fmt.Fprintf(w, "  tx_id:         %s\n", in.TxIDHex)
 	fmt.Fprintf(w, "  signatures:    %d\n", len(in.SignaturesHex))
 	fmt.Fprintf(w, "  kind:          %s\n", kind)
-	for _, k := range []string{"from", "to", "amount", "amount_minimal", "contract", "fee_limit_sun", "expiration"} {
+	for _, k := range multisigPreviewKeys {
 		if v, ok := fields[k]; ok && v != "" {
-			fmt.Fprintf(w, "  %-14s %s\n", k+":", v)
+			fmt.Fprintf(w, "  %-18s %s\n", k+":", v)
 		}
 	}
 	for _, warn := range warnings {
 		fmt.Fprintf(w, "  WARNING:       %s\n", warn)
 	}
+}
+
+var multisigPreviewKeys = []string{
+	"from", "to", "amount", "amount_minimal", "contract", "fee_limit_sun",
+	"call_value_sun", "call_token_value", "token_id", "memo_hex", "expiration",
 }
 
 // requireConfirm mirrors OfflineService.requireConfirm; kept private so

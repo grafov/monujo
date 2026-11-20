@@ -17,7 +17,10 @@ package tron_test
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
+	"errors"
+	"math/big"
 	"strings"
 	"time"
 
@@ -33,8 +36,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/grafov/monujo/internal/config"
-	"github.com/grafov/monujo/internal/tron"
 	"github.com/grafov/monujo/internal/transfer"
+	"github.com/grafov/monujo/internal/tron"
 )
 
 func mustEncodeAny(msg proto.Message) *anypb.Any {
@@ -237,6 +240,48 @@ var _ = Describe("Offline", func() {
 			Expect(summary.To).To(Equal(testToAddr))
 			Expect(summary.Contract).To(Equal(tron.MainnetUSDTContract))
 			Expect(summary.AmountWei.Int64()).To(Equal(int64(0xff)))
+			Expect(summary.CallValueSun).To(Equal(int64(0)))
+			Expect(summary.Memo).To(BeNil())
+		})
+
+		It("records attached value, memo and a non-canonical token label", func() {
+			toBytes := mustDecodeBase58(testToAddr)
+			data := append([]byte{0xa9, 0x05, 0x9c, 0xbb}, make([]byte, 64)...)
+			copy(data[4+12:], toBytes[1:])
+			data[len(data)-1] = 0x02
+
+			raw := &core.TransactionRaw{
+				Expiration: time.Now().Add(time.Minute).UnixMilli(),
+				Data:       []byte("note"),
+				Contract: []*core.Transaction_Contract{
+					{
+						Type:         core.Transaction_Contract_TriggerSmartContract,
+						PermissionId: 3,
+						Parameter: mustEncodeAny(&core.TriggerSmartContract{
+							OwnerAddress:    mustDecodeBase58(testFromAddr),
+							ContractAddress: mustDecodeBase58(testToAddr),
+							Data:            data,
+							CallValue:       5_000_000,
+							CallTokenValue:  7,
+							TokenId:         1002000,
+						}),
+					},
+				},
+			}
+			rawBytes, err := proto.Marshal(raw)
+			Expect(err).NotTo(HaveOccurred())
+
+			summary, err := tron.DecodeRawDataSummary(hex.EncodeToString(rawBytes))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(summary.Kind).To(Equal(transfer.KindTRC20USDT))
+			Expect(summary.Contract).To(Equal(testToAddr))
+			Expect(summary.AmountStr).To(Equal("2 (contract " + testToAddr + ")"))
+			Expect(summary.AmountStr).NotTo(HaveSuffix("USDT"))
+			Expect(summary.CallValueSun).To(Equal(int64(5_000_000)))
+			Expect(summary.CallTokenValue).To(Equal(int64(7)))
+			Expect(summary.TokenID).To(Equal(int64(1002000)))
+			Expect(summary.PermissionID).To(Equal(int32(3)))
+			Expect(summary.Memo).To(Equal([]byte("note")))
 		})
 
 		It("rejects unsupported contract types", func() {
@@ -295,4 +340,130 @@ var _ = Describe("Offline", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Describe("BuildUnsigned rejects a substituted node transaction", func() {
+		It("rejects a TRX transfer whose recipient was swapped", func() {
+			tx := plainTRXTx(testFromAddr, testFromAddr, 1_500_000)
+			_, err := tron.BuildUnsignedTRX(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, testFromAddr, testToAddr, 1_500_000, "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("to="))
+		})
+
+		It("rejects a TRX transfer whose amount was swapped", func() {
+			tx := plainTRXTx(testFromAddr, testToAddr, 2)
+			_, err := tron.BuildUnsignedTRX(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, testFromAddr, testToAddr, 1, "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("amount="))
+		})
+
+		It("rejects a TRX transfer whose owner was swapped", func() {
+			tx := plainTRXTx(testToAddr, testToAddr, 1)
+			_, err := tron.BuildUnsignedTRX(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, testFromAddr, testToAddr, 1, "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("from="))
+		})
+
+		It("rejects a TRX transfer that carries a memo", func() {
+			tx := plainTRXTx(testFromAddr, testToAddr, 1)
+			tx.RawData.Data = []byte("memo")
+			_, err := tron.BuildUnsignedTRX(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, testFromAddr, testToAddr, 1, "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("memo"))
+		})
+
+		It("rejects a transaction with two contracts", func() {
+			tx := plainTRXTx(testFromAddr, testToAddr, 1)
+			tx.RawData.Contract = append(tx.RawData.Contract, tx.RawData.Contract[0])
+			_, err := tron.BuildUnsignedTRX(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, testFromAddr, testToAddr, 1, "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("contracts=2"))
+		})
+
+		It("rejects a USDT transfer with attached call_value", func() {
+			tx := plainUSDTTx(testFromAddr, testToAddr, tron.MainnetUSDTContract, 255, 1_000_000, 100_000_000)
+			_, err := tron.BuildUnsignedUSDT(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, 100_000_000, testFromAddr, testToAddr, big.NewInt(255), "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("call_value"))
+		})
+
+		It("rejects a USDT transfer aimed at a different contract", func() {
+			tx := plainUSDTTx(testFromAddr, testToAddr, testToAddr, 255, 0, 100_000_000)
+			_, err := tron.BuildUnsignedUSDT(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, 100_000_000, testFromAddr, testToAddr, big.NewInt(255), "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("canonical USDT"))
+		})
+
+		It("rejects a USDT transfer whose fee_limit was raised", func() {
+			tx := plainUSDTTx(testFromAddr, testToAddr, tron.MainnetUSDTContract, 255, 0, 999)
+			_, err := tron.BuildUnsignedUSDT(context.Background(), &fixedWriter{tx: tx}, config.NetworkMainnet, 100_000_000, testFromAddr, testToAddr, big.NewInt(255), "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("fee_limit="))
+		})
+	})
 })
+
+type fixedWriter struct {
+	tx *core.Transaction
+}
+
+func (f *fixedWriter) Close() error { return nil }
+
+func (f *fixedWriter) SendTRX(context.Context, string, string, int64, *ecdsa.PrivateKey) (string, error) {
+	return "", errors.New("unused")
+}
+
+func (f *fixedWriter) SendUSDT(context.Context, string, string, *big.Int, *ecdsa.PrivateKey) (string, error) {
+	return "", errors.New("unused")
+}
+
+func (f *fixedWriter) CreateTRXTransfer(context.Context, string, string, int64) (*core.Transaction, error) {
+	return f.tx, nil
+}
+
+func (f *fixedWriter) CreateTRC20Transfer(context.Context, string, string, string, *big.Int) (*core.Transaction, error) {
+	return f.tx, nil
+}
+
+func (f *fixedWriter) BroadcastTransaction(context.Context, *core.Transaction) error {
+	return errors.New("unused")
+}
+
+func (f *fixedWriter) GetTransactionSignWeight(context.Context, *core.Transaction) (*api.TransactionSignWeight, error) {
+	return nil, errors.New("unused")
+}
+
+func plainTRXTx(from, to string, amount int64) *core.Transaction {
+	return &core.Transaction{RawData: &core.TransactionRaw{
+		Expiration: time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:  time.Now().UnixMilli(),
+		Contract: []*core.Transaction_Contract{{
+			Type: core.Transaction_Contract_TransferContract,
+			Parameter: mustEncodeAny(&core.TransferContract{
+				OwnerAddress: mustDecodeBase58(from),
+				ToAddress:    mustDecodeBase58(to),
+				Amount:       amount,
+			}),
+		}},
+	}}
+}
+
+func plainUSDTTx(from, to, contract string, amount byte, callValue, fee int64) *core.Transaction {
+	toBytes := mustDecodeBase58(to)
+	data := append([]byte{0xa9, 0x05, 0x9c, 0xbb}, make([]byte, 64)...)
+	copy(data[16:36], toBytes[1:])
+	data[len(data)-1] = amount
+	return &core.Transaction{RawData: &core.TransactionRaw{
+		Expiration: time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:  time.Now().UnixMilli(),
+		FeeLimit:   fee,
+		Contract: []*core.Transaction_Contract{{
+			Type: core.Transaction_Contract_TriggerSmartContract,
+			Parameter: mustEncodeAny(&core.TriggerSmartContract{
+				OwnerAddress:    mustDecodeBase58(from),
+				ContractAddress: mustDecodeBase58(contract),
+				Data:            data,
+				CallValue:       callValue,
+			}),
+		}},
+	}}
+}

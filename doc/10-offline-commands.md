@@ -70,6 +70,13 @@ layers apply:
    - prints all fields plus the SHA-256 of the envelope file itself to
      stderr;
    - asks `[y/N]` (or accepts `--yes`).
+
+   `offline build` applies the same comparison to the transaction the
+   node returned, before the envelope is written. `offline sign` and
+   `offline broadcast` also refuse a payload whose `raw_data` is not a
+   plain transfer: non-zero `call_value` or `call_token_value`, a
+   TRC-10 `token_id`, a transaction memo, or a TRC-20 contract other
+   than the canonical USDT token for `--network`.
 2. **HMAC-SHA256 (optional).** If you set
    `--hmac-passphrase` or `--hmac-passphrase-env <NAME>` on all three
    commands, the envelope gets an `hmac_hex` — HMAC-SHA256 of

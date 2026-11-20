@@ -25,11 +25,11 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/common"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -458,3 +458,210 @@ var _ = Describe("HTTPWriteClient", func() {
 		Expect(c["Permission_id"]).To(BeEquivalentTo(2))
 	})
 })
+
+var _ = Describe("HTTPWriteClient signing", func() {
+	const (
+		fromAddr = "TZ4UXDV5ZhNW7fb2AMSbgfAEZ7hWsnYS2g"
+		toAddr   = "TPswDDCAWhJAZGdHPidFg5nEf8TkNToDX1"
+	)
+
+	It("signs and broadcasts a TRX transfer that matches the request", func() {
+		var broadcasts int
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/wallet/createtransaction":
+				var req struct {
+					Owner  string `json:"owner_address"`
+					To     string `json:"to_address"`
+					Amount int64  `json:"amount"`
+				}
+				body, err := io.ReadAll(r.Body)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(json.Unmarshal(body, &req)).To(Succeed())
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"raw_data_hex": httpTRXRawHex(req.Owner, req.To, req.Amount),
+				})
+			case "/wallet/broadcasthex":
+				broadcasts++
+				_ = json.NewEncoder(w).Encode(map[string]any{"result": true})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		DeferCleanup(ts.Close)
+
+		hwc := tron.NewHTTPWriteClientFromConfig(&config.Config{
+			Network:            config.NetworkMainnet,
+			HTTPBaseURL:        ts.URL,
+			DefaultFeeLimitSun: 100_000_000,
+		})
+		txid, err := hwc.SendTRX(context.Background(), fromAddr, toAddr, 1_000_000, mustGenerateKey())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(txid).NotTo(BeEmpty())
+		Expect(broadcasts).To(Equal(1))
+	})
+
+	It("refuses a TRX response whose recipient was swapped and does not broadcast", func() {
+		var broadcasts int
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/wallet/createtransaction":
+				var req struct {
+					Owner  string `json:"owner_address"`
+					Amount int64  `json:"amount"`
+				}
+				body, err := io.ReadAll(r.Body)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(json.Unmarshal(body, &req)).To(Succeed())
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"raw_data_hex": httpTRXRawHex(req.Owner, fromAddr, req.Amount),
+				})
+			case "/wallet/broadcasthex":
+				broadcasts++
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		DeferCleanup(ts.Close)
+
+		hwc := tron.NewHTTPWriteClientFromConfig(&config.Config{
+			Network:     config.NetworkMainnet,
+			HTTPBaseURL: ts.URL,
+		})
+		_, err := hwc.SendTRX(context.Background(), fromAddr, toAddr, 1_000_000, mustGenerateKey())
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("does not match the request"))
+		Expect(broadcasts).To(Equal(0))
+	})
+
+	It("signs and broadcasts a USDT transfer that matches the request", func() {
+		var broadcasts int
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/wallet/triggersmartcontract":
+				var req struct {
+					Owner    string `json:"owner_address"`
+					Contract string `json:"contract_address"`
+					Data     string `json:"data"`
+					FeeLimit int64  `json:"fee_limit"`
+				}
+				body, err := io.ReadAll(r.Body)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(json.Unmarshal(body, &req)).To(Succeed())
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"result": map[string]any{"result": true},
+					"transaction": map[string]any{
+						"raw_data_hex": httpUSDTRawHex(req.Owner, req.Contract, req.Data, req.FeeLimit, 0),
+					},
+				})
+			case "/wallet/broadcasthex":
+				broadcasts++
+				_ = json.NewEncoder(w).Encode(map[string]any{"result": true})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		DeferCleanup(ts.Close)
+
+		hwc := tron.NewHTTPWriteClientFromConfig(&config.Config{
+			Network:            config.NetworkMainnet,
+			HTTPBaseURL:        ts.URL,
+			DefaultFeeLimitSun: 100_000_000,
+		})
+		txid, err := hwc.SendUSDT(context.Background(), fromAddr, toAddr, mustParseBigInt("1000"), mustGenerateKey())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(txid).NotTo(BeEmpty())
+		Expect(broadcasts).To(Equal(1))
+	})
+
+	It("refuses a USDT response with call_value and does not broadcast", func() {
+		var broadcasts int
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/wallet/triggersmartcontract":
+				var req struct {
+					Owner    string `json:"owner_address"`
+					Contract string `json:"contract_address"`
+					Data     string `json:"data"`
+					FeeLimit int64  `json:"fee_limit"`
+				}
+				body, err := io.ReadAll(r.Body)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(json.Unmarshal(body, &req)).To(Succeed())
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"result": map[string]any{"result": true},
+					"transaction": map[string]any{
+						"raw_data_hex": httpUSDTRawHex(req.Owner, req.Contract, req.Data, req.FeeLimit, 2_000_000),
+					},
+				})
+			case "/wallet/broadcasthex":
+				broadcasts++
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		DeferCleanup(ts.Close)
+
+		hwc := tron.NewHTTPWriteClientFromConfig(&config.Config{
+			Network:            config.NetworkMainnet,
+			HTTPBaseURL:        ts.URL,
+			DefaultFeeLimitSun: 100_000_000,
+		})
+		_, err := hwc.SendUSDT(context.Background(), fromAddr, toAddr, mustParseBigInt("1000"), mustGenerateKey())
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("call_value"))
+		Expect(broadcasts).To(Equal(0))
+	})
+})
+
+func httpTRXRawHex(from, to string, amount int64) string {
+	GinkgoHelper()
+	fromB, err := address.Base58ToAddress(from)
+	Expect(err).NotTo(HaveOccurred())
+	toB, err := address.Base58ToAddress(to)
+	Expect(err).NotTo(HaveOccurred())
+	raw := &core.TransactionRaw{
+		RefBlockBytes: []byte{0xab, 0xcd},
+		Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:     time.Now().UnixMilli(),
+		Contract: []*core.Transaction_Contract{{
+			Type: core.Transaction_Contract_TransferContract,
+			Parameter: mustEncodeAny(&core.TransferContract{
+				OwnerAddress: fromB.Bytes(),
+				ToAddress:    toB.Bytes(),
+				Amount:       amount,
+			}),
+		}},
+	}
+	b, err := proto.Marshal(raw)
+	Expect(err).NotTo(HaveOccurred())
+	return hex.EncodeToString(b)
+}
+
+func httpUSDTRawHex(owner, contract, dataHex string, fee, callValue int64) string {
+	GinkgoHelper()
+	ownerB, err := address.Base58ToAddress(owner)
+	Expect(err).NotTo(HaveOccurred())
+	contractB, err := address.Base58ToAddress(contract)
+	Expect(err).NotTo(HaveOccurred())
+	data, err := hex.DecodeString(strings.TrimPrefix(dataHex, "0x"))
+	Expect(err).NotTo(HaveOccurred())
+	raw := &core.TransactionRaw{
+		RefBlockBytes: []byte{0xab, 0xcd},
+		Expiration:    time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:     time.Now().UnixMilli(),
+		FeeLimit:      fee,
+		Contract: []*core.Transaction_Contract{{
+			Type: core.Transaction_Contract_TriggerSmartContract,
+			Parameter: mustEncodeAny(&core.TriggerSmartContract{
+				OwnerAddress:    ownerB.Bytes(),
+				ContractAddress: contractB.Bytes(),
+				Data:            data,
+				CallValue:       callValue,
+			}),
+		}},
+	}
+	b, err := proto.Marshal(raw)
+	Expect(err).NotTo(HaveOccurred())
+	return hex.EncodeToString(b)
+}

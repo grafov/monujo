@@ -70,6 +70,13 @@ tavoloj aplikiĝas:
    - printas ĉiujn kampojn plus la SHA-256 de la koverta dosiero mem al
      stderr;
    - petas `[y/N]` (aŭ akceptas `--yes`).
+
+   `offline build` aplikas la saman komparon al la transakcio, kiun la
+   nodo redonis, antaŭ ol la koverto estas skribita. `offline sign` kaj
+   `offline broadcast` ankaŭ rifuzas ŝarĝon, kies `raw_data` ne estas
+   simpla translokigo: ne-nula `call_value` aŭ `call_token_value`,
+   TRC-10 `token_id`, memorando de transakcio, aŭ TRC-20-kontrakto alia
+   ol la kanona USDT-ĵetono por `--network`.
 2. **HMAC-SHA256 (nedeviga).** Se vi agordas
    `--hmac-passphrase` aŭ `--hmac-passphrase-env <NAME>` ĉe ĉiuj tri
    komandoj, la koverto ricevas `hmac_hex` — HMAC-SHA256 de

@@ -18,6 +18,7 @@ package app
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -35,9 +36,9 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/grafov/monujo/internal/config"
 	"github.com/grafov/monujo/internal/keystore"
+	"github.com/grafov/monujo/internal/transfer"
 	"github.com/grafov/monujo/internal/tron"
 	"github.com/grafov/monujo/internal/tron/trontest"
-	"github.com/grafov/monujo/internal/transfer"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
@@ -471,7 +472,126 @@ var _ = Describe("OfflineService", func() {
 		})
 		Expect(err).To(HaveOccurred())
 	})
+
+	It("rejects signing a USDT envelope that also moves TRX", func() {
+		fw, conn := startFakeServer()
+		svc, _, name, addr, pass := newOfflineForTest(fw, conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		dir := GinkgoT().TempDir()
+		unsigned := filepath.Join(dir, "u.json")
+		writePlainMismatchEnvelope(unsigned, addr, tron.MainnetUSDTContract, 1_000_000, false)
+
+		_, err := svc.Sign(SignOptions{
+			InPath:     unsigned,
+			OutPath:    filepath.Join(dir, "s.json"),
+			WalletName: name,
+			WalletPass: pass,
+			Yes:        true,
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("call_value"))
+	})
+
+	It("rejects broadcasting a signed envelope aimed at a non-canonical contract", func() {
+		fw, conn := startFakeServer()
+		svc, _, _, addr, pass := newOfflineForTest(fw, conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		dir := GinkgoT().TempDir()
+		signed := filepath.Join(dir, "s.json")
+		writePlainMismatchEnvelope(signed, addr, knownToAddr, 0, true)
+
+		_, err := svc.Broadcast(context.Background(), BroadcastOptions{
+			InPath: signed,
+			Yes:    true,
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("canonical USDT"))
+		Expect(fw.broadcastCalls).To(BeEmpty())
+	})
 })
+
+// writePlainMismatchEnvelope seals a TRC-20 transfer whose display fields
+// match raw_data but which is not a plain USDT transfer: callValue is
+// attached TRX, or contract is not the canonical USDT token. signed
+// selects the signed envelope used by broadcast.
+func writePlainMismatchEnvelope(path, from, contract string, callValue int64, signed bool) {
+	GinkgoHelper()
+
+	toBytes, err := common.DecodeCheck(knownToAddr)
+	Expect(err).NotTo(HaveOccurred())
+	fromBytes, err := common.DecodeCheck(from)
+	Expect(err).NotTo(HaveOccurred())
+	contractBytes, err := common.DecodeCheck(contract)
+	Expect(err).NotTo(HaveOccurred())
+
+	data := append([]byte{0xa9, 0x05, 0x9c, 0xbb}, make([]byte, 64)...)
+	copy(data[16:36], toBytes[1:])
+	data[len(data)-1] = 1
+	raw := &core.TransactionRaw{
+		Expiration: time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:  time.Now().UnixMilli(),
+		FeeLimit:   100_000_000,
+		Contract: []*core.Transaction_Contract{{
+			Type: core.Transaction_Contract_TriggerSmartContract,
+			Parameter: mustAny(&core.TriggerSmartContract{
+				OwnerAddress:    fromBytes,
+				ContractAddress: contractBytes,
+				Data:            data,
+				CallValue:       callValue,
+			}),
+		}},
+	}
+	rawBytes, err := proto.Marshal(raw)
+	Expect(err).NotTo(HaveOccurred())
+	rawHex := hex.EncodeToString(rawBytes)
+	summary, err := tron.DecodeRawDataSummary(rawHex)
+	Expect(err).NotTo(HaveOccurred())
+
+	if signed {
+		body, err := transfer.MarshalSignedPayload(transfer.SignedTransferPayload{
+			Version:       transfer.EnvelopeVersion,
+			Chain:         transfer.ChainTronMainnet,
+			Kind:          summary.Kind,
+			From:          summary.From,
+			To:            summary.To,
+			Amount:        summary.AmountStr,
+			AmountMinimal: summary.AmountWei.String(),
+			Contract:      summary.Contract,
+			FeeLimitSun:   summary.FeeLimitSun,
+			Expiration:    summary.ExpirationMs,
+			TxIDHex:       "0x" + strings.Repeat("ab", 32),
+			RawDataHex:    rawHex,
+			SignatureHex:  "0x" + strings.Repeat("11", 65),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		blob, err := transfer.SealPayload(transfer.KindSignedTransfer, body, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.WriteFile(path, blob, 0o600)).To(Succeed())
+		return
+	}
+
+	body, err := transfer.MarshalUnsignedPayload(transfer.UnsignedTransferPayload{
+		Version:       transfer.EnvelopeVersion,
+		Chain:         transfer.ChainTronMainnet,
+		Kind:          summary.Kind,
+		From:          summary.From,
+		To:            summary.To,
+		Amount:        summary.AmountStr,
+		AmountMinimal: summary.AmountWei.String(),
+		Contract:      summary.Contract,
+		FeeLimitSun:   summary.FeeLimitSun,
+		Expiration:    summary.ExpirationMs,
+		Timestamp:     summary.TimestampMs,
+		TxIDHex:       "0x" + strings.Repeat("ab", 32),
+		RawDataHex:    rawHex,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	blob, err := transfer.SealPayload(transfer.KindUnsignedTransfer, body, nil)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(os.WriteFile(path, blob, 0o600)).To(Succeed())
+}
 
 // tamperPayload reads an envelope file, decodes its payload JSON, applies
 // mutate, re-encodes the payload (without recomputing HMAC) and writes the

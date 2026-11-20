@@ -30,6 +30,7 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/grafov/monujo/internal/config"
+	"github.com/grafov/monujo/internal/transfer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -81,21 +82,40 @@ func callerCtx(ctx context.Context) context.Context {
 
 // SendTRX transfers native TRX (amount in sun).
 func (w *GRPCWriteClient) SendTRX(ctx context.Context, fromAddr, toAddr string, amountSun int64, priv *ecdsa.PrivateKey) (string, error) {
-	txe, err := w.gc.TransferCtx(callerCtx(ctx), fromAddr, toAddr, amountSun)
+	tx, err := w.CreateTRXTransfer(ctx, fromAddr, toAddr, amountSun)
 	if err != nil {
 		return "", err
 	}
-	return w.signAndBroadcast(ctx, txe.GetTransaction(), priv)
+	if err := VerifyBuiltTransfer(tx, TransferSpec{
+		Network: w.cfg.Network,
+		Kind:    transfer.KindTRX,
+		From:    fromAddr,
+		To:      toAddr,
+		Amount:  big.NewInt(amountSun),
+	}); err != nil {
+		return "", err
+	}
+	return w.signAndBroadcast(ctx, tx, priv)
 }
 
 // SendUSDT transfers USDT on the configured network using the canonical USDT (or test) contract.
 func (w *GRPCWriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string, amount *big.Int, priv *ecdsa.PrivateKey) (string, error) {
 	contract := USDTContractForNetwork(w.cfg.Network)
-	txe, err := w.gc.TRC20SendCtx(callerCtx(ctx), fromAddr, toAddr, contract, amount, w.cfg.DefaultFeeLimitSun)
+	tx, err := w.CreateTRC20Transfer(ctx, fromAddr, toAddr, contract, amount)
 	if err != nil {
 		return "", err
 	}
-	return w.signAndBroadcast(ctx, txe.GetTransaction(), priv)
+	if err := VerifyBuiltTransfer(tx, TransferSpec{
+		Network:     w.cfg.Network,
+		Kind:        transfer.KindTRC20USDT,
+		From:        fromAddr,
+		To:          toAddr,
+		Amount:      amount,
+		FeeLimitSun: w.cfg.DefaultFeeLimitSun,
+	}); err != nil {
+		return "", err
+	}
+	return w.signAndBroadcast(ctx, tx, priv)
 }
 
 // CreateTRXTransfer builds an unsigned native TRX transfer via gRPC.

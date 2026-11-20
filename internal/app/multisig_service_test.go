@@ -33,9 +33,9 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/grafov/monujo/internal/config"
 	"github.com/grafov/monujo/internal/keystore"
+	"github.com/grafov/monujo/internal/transfer"
 	"github.com/grafov/monujo/internal/tron"
 	"github.com/grafov/monujo/internal/tron/trontest"
-	"github.com/grafov/monujo/internal/transfer"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
@@ -442,4 +442,117 @@ var _ = Describe("MultisigService", func() {
 		Expect(res.ApprovedSigners).To(ConsistOf(from))
 		Expect(res.MissingSigners).To(HaveLen(1))
 	})
+
+	It("shows call_value and a WARNING when cosigning Tron JSON", func() {
+		_, conn := startMultisigFake()
+		svc, _, name, from, pass, _ := newMultisigForTest(conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		var preview bytes.Buffer
+		svc.confirmOut = &preview
+
+		rawHex := multisigUSDTRawHex(from, toAddr, tron.MainnetUSDTContract, 1, 2_500_000)
+		body, err := tron.EncodeTronJSON(rawHex, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		dir := GinkgoT().TempDir()
+		inPath := filepath.Join(dir, "in.json")
+		outPath := filepath.Join(dir, "out.json")
+		Expect(os.WriteFile(inPath, body, 0o600)).To(Succeed())
+
+		_, err = svc.Cosign(CosignOptions{
+			InPath:     inPath,
+			OutPath:    outPath,
+			WalletName: name,
+			WalletPass: pass,
+			Yes:        true,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(preview.String()).To(ContainSubstring("call_value_sun:"))
+		Expect(preview.String()).To(ContainSubstring("2500000"))
+		Expect(preview.String()).To(ContainSubstring("WARNING:"))
+		Expect(preview.String()).To(ContainSubstring("call_value is 2500000 sun"))
+	})
+
+	It("rejects a monujo USDT envelope that also moves TRX", func() {
+		_, conn := startMultisigFake()
+		svc, _, name, from, pass, _ := newMultisigForTest(conn)
+		defer keystore.ZeroPassphrase(pass)
+
+		rawHex := multisigUSDTRawHex(from, toAddr, tron.MainnetUSDTContract, 1, 2_500_000)
+		summary, err := tron.DecodeRawDataSummary(rawHex)
+		Expect(err).NotTo(HaveOccurred())
+		pl := transfer.MultisigTransferPayload{
+			Version:       transfer.EnvelopeVersion,
+			Chain:         transfer.ChainTronMainnet,
+			Kind:          transfer.KindTRC20USDT,
+			From:          summary.From,
+			To:            summary.To,
+			Amount:        summary.AmountStr,
+			AmountMinimal: summary.AmountWei.String(),
+			Contract:      summary.Contract,
+			FeeLimitSun:   summary.FeeLimitSun,
+			RawDataHex:    rawHex,
+			TxIDHex:       "0x" + strings.Repeat("cd", 32),
+			Expiration:    summary.ExpirationMs,
+			Timestamp:     summary.TimestampMs,
+		}
+		payload, err := transfer.MarshalMultisigPayload(pl)
+		Expect(err).NotTo(HaveOccurred())
+		body, err := transfer.SealPayload(transfer.KindMultisigTransfer, payload, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		dir := GinkgoT().TempDir()
+		inPath := filepath.Join(dir, "in.json")
+		Expect(os.WriteFile(inPath, body, 0o600)).To(Succeed())
+
+		_, err = svc.Cosign(CosignOptions{
+			InPath:     inPath,
+			OutPath:    filepath.Join(dir, "out.json"),
+			Format:     MultisigFormatMonujo,
+			WalletName: name,
+			WalletPass: pass,
+			Yes:        true,
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("claims a plain transfer"))
+		Expect(err.Error()).To(ContainSubstring("call_value"))
+	})
+
+	It("labels a Tron JSON transfer with attached TRX as unknown_contract", func() {
+		rawHex := multisigUSDTRawHex("TMuA6YqfCeX8EhbfYEg5y7S4DqzSJireY9", toAddr, tron.MainnetUSDTContract, 1, 9)
+		cfg, err := config.Build(config.NetworkMainnet, config.OutputTable, "", "", "", GinkgoT().TempDir())
+		Expect(err).NotTo(HaveOccurred())
+		pl := buildMonujoFromTronJSON(MultisigInput{RawDataHex: rawHex, TxIDHex: "0x01"}, cfg)
+		Expect(pl.Kind).To(Equal(transfer.KindUnknownContract))
+		Expect(pl.From).NotTo(BeEmpty())
+	})
 })
+
+func multisigUSDTRawHex(from, to, contract string, amount byte, callValue int64) string {
+	GinkgoHelper()
+	toBytes := mustDecodeB58(to)
+	data := append([]byte{0xa9, 0x05, 0x9c, 0xbb}, make([]byte, 64)...)
+	copy(data[16:36], toBytes[1:])
+	data[len(data)-1] = amount
+	param := &core.TriggerSmartContract{
+		OwnerAddress:    mustDecodeB58(from),
+		ContractAddress: mustDecodeB58(contract),
+		Data:            data,
+		CallValue:       callValue,
+	}
+	pbytes, err := proto.Marshal(param)
+	Expect(err).NotTo(HaveOccurred())
+	raw := &core.TransactionRaw{
+		Expiration: time.Now().Add(time.Minute).UnixMilli(),
+		Timestamp:  time.Now().UnixMilli(),
+		FeeLimit:   100_000_000,
+		Contract: []*core.Transaction_Contract{{
+			Type:      core.Transaction_Contract_TriggerSmartContract,
+			Parameter: &anypb.Any{TypeUrl: "type.googleapis.com/protocol.TriggerSmartContract", Value: pbytes},
+		}},
+	}
+	b, err := proto.Marshal(raw)
+	Expect(err).NotTo(HaveOccurred())
+	return hex.EncodeToString(b)
+}
