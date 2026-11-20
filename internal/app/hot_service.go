@@ -28,6 +28,13 @@ import (
 	"github.com/grafov/monujo/internal/tron"
 )
 
+// JSON keys for wallet import and create output.
+const (
+	walletOutName    = "name"
+	walletOutAddress = "address"
+	walletOutPath    = "path"
+)
+
 // HotService performs online signing operations with encrypted hot wallets.
 type HotService struct {
 	cfg *config.Config
@@ -68,9 +75,9 @@ func (h *HotService) ImportWallet(name, privHex string, pass []byte) error {
 	}
 	if h.cfg.Output == config.OutputJSON {
 		return json.NewEncoder(os.Stdout).Encode(map[string]string{
-			"name":    name,
-			"address": addr,
-			"path":    h.ks,
+			walletOutName:    name,
+			walletOutAddress: addr,
+			walletOutPath:    h.ks,
 		})
 	}
 	fmt.Printf("Imported wallet %q -> %s\nKeystore: %s\n", name, addr, h.ks)
@@ -85,10 +92,10 @@ func (h *HotService) ImportExternalWallet(name, tronAddress string) error {
 	}
 	if h.cfg.Output == config.OutputJSON {
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{
-			"name":     name,
-			"address":  addr,
-			"path":     h.ks,
-			"external": true,
+			walletOutName:    name,
+			walletOutAddress: addr,
+			walletOutPath:    h.ks,
+			"external":       true,
 		})
 	}
 	fmt.Printf("Imported external wallet %q -> %s\nKeystore: %s\n", name, addr, h.ks)
@@ -104,9 +111,9 @@ func (h *HotService) CreateWallet(name string, pass []byte, exportPriv, includeP
 	}
 	if h.cfg.Output == config.OutputJSON {
 		m := map[string]string{
-			"name":    name,
-			"address": addr,
-			"path":    h.ks,
+			walletOutName:    name,
+			walletOutAddress: addr,
+			walletOutPath:    h.ks,
 		}
 		if includePrivInJSON {
 			m["private_key_hex"] = privHex

@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Go 1.26.5** or newer (see `go.mod`).
+- **Go 1.27.4** or newer (see `go.mod`).
 - **GNU Make** (for convenience; you can also build directly with `go build`).
 - **Git** (the Makefile uses `git describe` and `git rev-parse` to
   embed the version into the binary).

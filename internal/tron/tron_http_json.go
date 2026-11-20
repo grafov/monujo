@@ -27,6 +27,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Wallet HTTP API field names shared by create-transaction bodies and
+// transactionToHTTPJSON. The values are the node contract.
+const (
+	httpFieldOwnerAddress = "owner_address"
+	httpFieldVisible      = "visible"
+)
+
 func transactionToHTTPJSON(tx *core.Transaction) (map[string]any, error) {
 	if tx == nil || tx.GetRawData() == nil {
 		return nil, errors.New("nil transaction or raw_data")
@@ -64,9 +71,9 @@ func transactionToHTTPJSON(tx *core.Transaction) (map[string]any, error) {
 				return nil, fmt.Errorf("unmarshal TransferContract: %w", err)
 			}
 			valMap = map[string]any{
-				"owner_address": common.EncodeCheck(tc.GetOwnerAddress()),
-				"to_address":    common.EncodeCheck(tc.GetToAddress()),
-				"amount":        tc.GetAmount(),
+				httpFieldOwnerAddress: common.EncodeCheck(tc.GetOwnerAddress()),
+				"to_address":          common.EncodeCheck(tc.GetToAddress()),
+				"amount":              tc.GetAmount(),
 			}
 
 		case core.Transaction_Contract_TriggerSmartContract:
@@ -76,9 +83,9 @@ func transactionToHTTPJSON(tx *core.Transaction) (map[string]any, error) {
 				return nil, fmt.Errorf("unmarshal TriggerSmartContract: %w", err)
 			}
 			valMap = map[string]any{
-				"owner_address":    common.EncodeCheck(ts.GetOwnerAddress()),
-				"contract_address": common.EncodeCheck(ts.GetContractAddress()),
-				"data":             hex.EncodeToString(ts.GetData()),
+				httpFieldOwnerAddress: common.EncodeCheck(ts.GetOwnerAddress()),
+				"contract_address":    common.EncodeCheck(ts.GetContractAddress()),
+				"data":                hex.EncodeToString(ts.GetData()),
 			}
 			if ts.GetCallValue() != 0 {
 				valMap["call_value"] = ts.GetCallValue()
@@ -127,10 +134,10 @@ func transactionToHTTPJSON(tx *core.Transaction) (map[string]any, error) {
 	}
 
 	return map[string]any{
-		"visible":      true,
-		"txID":         txID,
-		"raw_data":     rawDataJSON,
-		"raw_data_hex": rawDataHex,
-		"signature":    sigs,
+		httpFieldVisible: true,
+		"txID":           txID,
+		"raw_data":       rawDataJSON,
+		"raw_data_hex":   rawDataHex,
+		"signature":      sigs,
 	}, nil
 }

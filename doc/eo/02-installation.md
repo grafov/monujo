@@ -2,7 +2,7 @@
 
 ## Postuloj
 
-- **Go 1.26.5** aŭ pli nova (vidu `go.mod`).
+- **Go 1.27.4** aŭ pli nova (vidu `go.mod`).
 - **GNU Make** (por komforto; oni ankaŭ povas konstrui rekte per `go build`).
 - **Git** (la Makefile uzas `git describe` kaj `git rev-parse` por
   enmeti la version en la binaraĵon).

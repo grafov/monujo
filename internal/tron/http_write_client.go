@@ -103,10 +103,10 @@ func (h *HTTPWriteClient) SendUSDT(ctx context.Context, fromAddr, toAddr string,
 // CreateTRXTransfer calls POST /wallet/createtransaction.
 func (h *HTTPWriteClient) CreateTRXTransfer(ctx context.Context, from, to string, amountSun int64) (*core.Transaction, error) {
 	body := map[string]any{
-		"owner_address": from,
-		"to_address":    to,
-		"amount":        amountSun,
-		"visible":       true,
+		httpFieldOwnerAddress: from,
+		"to_address":          to,
+		"amount":              amountSun,
+		httpFieldVisible:      true,
 	}
 	respBody, err := h.postWallet(ctx, "/wallet/createtransaction", body)
 	if err != nil {
@@ -129,11 +129,11 @@ func (h *HTTPWriteClient) CreateTRC20Transfer(ctx context.Context, from, to, con
 	toAddrPadded := common.LeftPadBytes(toAddrBytes, 32)
 	dataHex := trc20TransferMethodSignature + common.Bytes2Hex(toAddrPadded) + common.Bytes2Hex(ab)
 	body := map[string]any{
-		"owner_address":    from,
-		"contract_address": contract,
-		"data":             strings.TrimPrefix(dataHex, "0x"),
-		"fee_limit":        h.cfg.DefaultFeeLimitSun,
-		"visible":          true,
+		httpFieldOwnerAddress: from,
+		"contract_address":    contract,
+		"data":                strings.TrimPrefix(dataHex, "0x"),
+		"fee_limit":           h.cfg.DefaultFeeLimitSun,
+		httpFieldVisible:      true,
 	}
 	respBody, err := h.postWallet(ctx, "/wallet/triggersmartcontract", body)
 	if err != nil {
